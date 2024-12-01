@@ -23,7 +23,7 @@ Write in a classic noir narrative style.`,
 - Watson's medical or practical insights
 Maintain Holmes's precise, analytical manner of speaking.`,
 
-  STORY_DEVELOPMENT: `Develop the story with new revelations and developments, incorporating interactive challenges for Watson. Include:
+  STORY_DEVELOPMENT: `Develop the story with new revelations and developments, incorporating interactive challenges for Watson, the story moves forward with every chapter. Include:
 
 Story Elements:
 - New information coming to light
@@ -145,28 +145,11 @@ Available Evidence: ${JSON.stringify(context?.evidence || [])}
 Recent Dialogue: ${JSON.stringify(context?.recentDialogue || [])}
 Recent Deductions: ${JSON.stringify(context?.recentDeductions || [])}
 
-For the STORY_DEVELOPMENT phase, ensure actions are formatted as interactive challenges and there is only 1 action:
-{
-  "id": "unique_id",
-  "text": "Description of the challenge",
-  "type": "ACTION/RIDDLE/PUZZLE/MEDICAL/OBSERVATION/LOGIC/PHYSICAL",
-  "challenge": {
-    "question": "The actual riddle or puzzle text, include the evidence contents as required",
-    "hints": ["Subtle hint 1", "Subtle hint 2"],
-    "solution": "Expected solution or approach",
-    "difficulty": "EASY/MEDIUM/HARD"
-  },
-  "requiresEvidence": ["evidence_ids"],
-  "availableFor": "WATSON",
-  "reward": {
-    "type": "EVIDENCE/DEDUCTION/LOCATION",
-    "description": "What solving this challenge reveals"
-  }
-}
+For the STORY_DEVELOPMENT phase, please ensure there must be only 1 type of interactive challenge at a time:
 
-For the NARRATOR_INTRODUCTION phase, please render the narrative only. Rest can be empty. 
+For the NARRATOR_INTRODUCTION phase, please render the narrative only. Rest should be empty. 
 
-For the HOLMES_INITIAL_REACTION phase, please render the narrative, dialogueEntries and deductions only. Rest can be empty.
+For the HOLMES_INITIAL_REACTION phase, please render the narrative, dialogueEntries and deductions only. Rest should be empty.
 
 Please provide your response in valid JSON format with the following structure:
 {
@@ -174,6 +157,7 @@ Please provide your response in valid JSON format with the following structure:
   "dialogueEntries": [
     {"speaker": "HOLMES/WATSON/NARRATOR/LESTRADE/WITNESS", "text": "Their words"}
   ],
+  "chapterTitle": "Name of the chapter",
   "deductions": [
     {
       "observation": "What was observed",
@@ -193,23 +177,26 @@ Please provide your response in valid JSON format with the following structure:
   ],
   "availableActions": [
     {
-      "id": "unique_id",
-      "text": "Description of the challenge",
-      "type": "ACTION",
-      "challenge": {
-        "question": "The actual riddle or puzzle text",
-        "hints": ["Subtle hint 1", "Subtle hint 2"],
-        "solution": "Expected solution",
-        "difficulty": "MEDIUM"
-      },
-      "requiresEvidence": [],
-      "availableFor": "WATSON",
-      "reward": {
-        "type": "EVIDENCE",
-        "description": "What solving this challenge reveals"
-      }
+    "id": "unique_id",
+    "text": "Description of the challenge",
+    "type": "ACTION/RIDDLE/PUZZLE/MEDICAL/OBSERVATION/LOGIC/PHYSICAL" (choose one per chapter),
+    "challenge": { (If type is not ACTION, include this object)
+      "question": "The actual riddle or puzzle text, include the evidence contents as required",
+      "hints": ["Subtle hint 1", "Subtle hint 2"],
+      "solution": "Direct solution in a word or phrase to the challenge",
+      "difficulty": "EASY/MEDIUM/HARD"
+    },
+    "action": { (If type is ACTION, include this object)
+      "text": "Description of the action",
+      "actionOptions": ["Option 1", "Option 2"],
+    },
+    "requiresEvidence": ["evidence_ids"],
+    "availableFor": "WATSON",
+    "reward": {
+      "type": "EVIDENCE/DEDUCTION/LOCATION",
+      "description": "What solving this challenge reveals"
     }
-  ],
+  ]
 }
 
 Ensure your response is ONLY the JSON object, with no additional text before or after.`;

@@ -19,6 +19,8 @@ export default function NarratorIntroduction() {
     };
   }, []);
 
+  console.log(streamingState);
+
   useEffect(() => {
     if (streamingState.isComplete && streamingState.fullResponse) {
       streamingState.fullResponse.dialogueEntries?.forEach(entry => {

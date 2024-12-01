@@ -2,7 +2,7 @@ import { motion } from 'framer-motion'
 import { useGameStore } from '@/store/gameState'
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useStreamingResponse } from '@/hooks/useStreamingResponse'
-import { Action, Evidence } from '@/store/gameState'
+import { Action, Evidence, DeductionEntry } from '@/store/gameState'
 import EvidenceReport  from './EvidenceReport'
 
 interface ChatItem {
@@ -23,6 +23,7 @@ interface ActionButtonProps {
 }
 
 interface Challenge {
+  type: 'action' | 'riddle' | 'puzzle' | 'medical' | 'observation';
   question: string;
   hints: string[];
   solution: string;
@@ -32,6 +33,8 @@ interface Challenge {
 interface Reward {
   type: 'EVIDENCE' | 'DEDUCTION' | 'LOCATION';
   description: string;
+  evidence?: Evidence[];
+  deductions?: DeductionEntry[];
 }
 
 const ActionButton: React.FC<ActionButtonProps> = ({ action, onClick, disabled, evidence }) => {
@@ -153,6 +156,7 @@ const DifficultyBadge: React.FC<{ difficulty: string }> = ({ difficulty }) => {
     </span>
   );
 };
+
 
 const EvidenceItem: React.FC<{ evidence: Evidence }> = ({ evidence }) => {
   const { availableActions } = useGameStore();
@@ -300,15 +304,40 @@ const ChallengeCard: React.FC<{
   action: Action;
   onSolve: () => void;
   evidence?: Evidence[];
-}> = ({ action, onSolve, evidence }) => {
+  onChapterProgress: () => void;
+}> = ({ action, onSolve, evidence, onChapterProgress }) => {
   const [attempt, setAttempt] = useState('');
   const [showHints, setShowHints] = useState(false);
   const [isCorrect, setIsCorrect] = useState(false);
 
+  // Calculate similarity between two strings (0 to 1)
+  const calculateSimilarity = (str1: string, str2: string): number => {
+    const s1 = str1.toLowerCase().trim();
+    const s2 = str2.toLowerCase().trim();
+    
+    // Convert strings to sets of words
+    const words1 = new Set(s1.split(/\s+/));
+    const words2 = new Set(s2.split(/\s+/));
+    
+    // Calculate intersection
+    const intersection = new Set([...words1].filter(x => words2.has(x)));
+    
+    // Calculate Jaccard similarity
+    const union = new Set([...words1, ...words2]);
+    return intersection.size / union.size;
+  };
+
   const handleSubmit = () => {
-    if (attempt.toLowerCase().trim() === action.challenge.solution.toLowerCase().trim()) {
+    const similarity = calculateSimilarity(attempt, action.challenge.solution);
+    // Consider it correct if similarity is above 0.1 (10% similar)
+    if (similarity >= 0.1) {
       setIsCorrect(true);
       onSolve();
+      // Progress to next chapter
+      onChapterProgress();
+    } else {
+      // Optional: Add feedback for incorrect answers
+      alert("That's not quite right. Try again!");
     }
   };
 
@@ -452,6 +481,7 @@ export default function StoryDevelopment() {
   
   const [chatItems, setChatItems] = useState<ChatItem[]>([]);
   const [activeItemIndex, setActiveItemIndex] = useState<number>(0);
+  const [currentChapter, setCurrentChapter] = useState<number>(1);
   const [isAllComplete, setIsAllComplete] = useState(false);
   const [showActions, setShowActions] = useState(false);
   const storyEndRef = useRef<HTMLDivElement>(null);
@@ -465,6 +495,7 @@ export default function StoryDevelopment() {
   useEffect(() => {
     startStreaming('STORY_DEVELOPMENT', {
       phase: 'STORY_DEVELOPMENT',
+      chapter: currentChapter,
       currentLocation: '221B Baker Street',
       recentDialogue: dialogueHistory,
       evidence: evidence,
@@ -474,6 +505,101 @@ export default function StoryDevelopment() {
       stopStreaming();
     };
   }, []);
+
+  // Handle streaming response updates
+  useEffect(() => {
+    if (streamingState.fullResponse) {
+      // Add chapter header if chapterTitle is available
+      if (streamingState.fullResponse.chapterTitle && 
+          !chatItems.some(item => item.id === `chapter-${currentChapter}`)) {
+        setChatItems(prev => [...prev, {
+          id: `chapter-${currentChapter}`,
+          type: 'narrative',
+          text: `Chapter ${currentChapter}: ${streamingState.fullResponse.chapterTitle}`,
+          currentText: `Chapter ${currentChapter}: ${streamingState.fullResponse.chapterTitle}`,
+          isComplete: true
+        }]);
+      }
+
+      // Handle dialogue entries
+      streamingState.fullResponse.dialogueEntries?.forEach(entry => {
+        if (!chatItems.some(item => item.id === `dialogue-${entry.text}`)) {
+          setChatItems(prev => [...prev, {
+            id: `dialogue-${entry.text}`,
+            type: 'dialogue',
+            text: entry.text,
+            currentText: entry.text,
+            speaker: entry.speaker,
+            isComplete: true
+          }]);
+          addDialogue({
+            text: entry.text,
+            speaker: entry.speaker || '',
+            timestamp: new Date().toISOString()
+          });
+        }
+      });
+
+      // Handle deductions
+      streamingState.fullResponse.deductions?.forEach(deduction => {
+        if (!chatItems.some(item => item.id === `deduction-${deduction.conclusion}`)) {
+          const deductionText = `${deduction.conclusion}\n\nBased on: ${deduction.observation}`;
+          setChatItems(prev => [...prev, {
+            id: `deduction-${deduction.conclusion}`,
+            type: 'deduction',
+            text: deductionText,
+            currentText: deductionText,
+            isComplete: true
+          }]);
+          addDeduction({
+            conclusion: deduction.conclusion,
+            observation: deduction.observation,
+            timestamp: new Date().toISOString(),
+            author: deduction.author || 'HOLMES'
+          });
+        }
+      });
+
+      // Handle evidence
+      streamingState.fullResponse.evidence?.forEach(evidenceItem => {
+        if (!chatItems.some(item => item.id === `evidence-${evidenceItem.id}`)) {
+          setChatItems(prev => [...prev, {
+            id: `evidence-${evidenceItem.id}`,
+            type: 'evidence',
+            text: `New Evidence Discovered: ${evidenceItem.title}`,
+            currentText: `New Evidence Discovered: ${evidenceItem.title}`,
+            isComplete: true,
+            evidence: evidenceItem
+          }]);
+          addEvidence(evidenceItem);
+        }
+      });
+
+      // Update available actions
+      if (streamingState.fullResponse.availableActions) {
+        setAvailableActions(streamingState.fullResponse.availableActions);
+        setShowActions(true);
+      }
+    }
+  }, [streamingState.fullResponse, currentChapter]);
+
+  // Handle chapter progression
+  const handleChapterProgression = useCallback(() => {
+    setCurrentChapter(prev => prev + 1);
+    if (currentChapter < 3) {
+      // Start streaming next chapter content
+      startStreaming('STORY_DEVELOPMENT', {
+        phase: 'STORY_DEVELOPMENT',
+        chapter: currentChapter + 1,
+        currentLocation: '221B Baker Street',
+        recentDialogue: dialogueHistory,
+        evidence: evidence,
+      });
+    } else {
+      // Move to next phase after chapter 3
+      setPhase('HOLMES_INVESTIGATION');
+    }
+  }, [currentChapter, dialogueHistory, evidence, setPhase, startStreaming]);
 
   // Handle streaming text animation
   useEffect(() => {
@@ -523,70 +649,6 @@ export default function StoryDevelopment() {
     }
   }, [streamingState.narrative]);
 
-  // Handle streaming response updates
-  useEffect(() => {
-    if (streamingState.fullResponse) {
-      // Handle dialogue entries
-      streamingState.fullResponse.dialogueEntries?.forEach(entry => {
-        if (!chatItems.some(item => item.id === `dialogue-${entry.text}`)) {
-          setChatItems(prev => [...prev, {
-            id: `dialogue-${entry.text}`,
-            type: 'dialogue',
-            text: entry.text,
-            currentText: '',
-            speaker: entry.speaker,
-            isComplete: false
-          }]);
-          addDialogue({
-            text: entry.text,
-            speaker: entry.speaker || '',
-            timestamp: new Date().toISOString()
-          });
-        }
-      });
-
-      // Handle deductions
-      streamingState.fullResponse.deductions?.forEach(deduction => {
-        if (!chatItems.some(item => item.id === `deduction-${deduction.conclusion}`)) {
-          const deductionText = `${deduction.conclusion}\n\nBased on: ${deduction.observation}`;
-          setChatItems(prev => [...prev, {
-            id: `deduction-${deduction.conclusion}`,
-            type: 'deduction',
-            text: deductionText,
-            currentText: '',
-            isComplete: false
-          }]);
-          addDeduction({
-            conclusion: deduction.conclusion,
-            observation: deduction.observation,
-            timestamp: new Date().toISOString(),
-            author: deduction.author || 'HOLMES'
-          });
-        }
-      });
-
-      // Handle evidence
-      streamingState.fullResponse.evidence?.forEach(evidenceItem => {
-        if (!chatItems.some(item => item.id === `evidence-${evidenceItem.id}`)) {
-          setChatItems(prev => [...prev, {
-            id: `evidence-${evidenceItem.id}`,
-            type: 'evidence',
-            text: `New Evidence Discovered: ${evidenceItem.title}`,
-            currentText: '',
-            isComplete: false,
-            evidence: evidenceItem
-          }]);
-          addEvidence(evidenceItem);
-        }
-      });
-
-      // Update available actions
-      if (streamingState.fullResponse.availableActions) {
-        setAvailableActions(streamingState.fullResponse.availableActions);
-      }
-    }
-  }, [streamingState.fullResponse]);
-
   // Check if all items are complete
   useEffect(() => {
     if (chatItems.length > 0 && chatItems.every(item => item.isComplete)) {
@@ -626,6 +688,36 @@ export default function StoryDevelopment() {
     });
   };
 
+  const handleActionSelected = async (actionId: string) => {
+    const context: any = {
+      phase: 'STORY_DEVELOPMENT',
+      selectedAction: actionId,
+      evidence: evidence,
+      recentDialogue: dialogueHistory.slice(-3),
+      recentDeductions: [],
+    };
+    
+    await startStreaming('STORY_DEVELOPMENT', context);
+    
+    if (streamingState.fullResponse?.selectedAction) {
+      const { unlockedEvidence, unlockedDeductions } = streamingState.fullResponse.selectedAction;
+      unlockedEvidence?.forEach(evidence => addEvidence(evidence));
+      unlockedDeductions?.forEach(deduction => addDeduction(deduction));
+    }
+  };
+
+  const handleChallengeSolved = async (solution: string) => {
+    const context: any = {
+      phase: 'STORY_DEVELOPMENT',
+      selectedSolution: solution,
+      evidence: evidence,
+      recentDialogue: dialogueHistory.slice(-3),
+      recentDeductions: [],
+    };
+    
+    await startStreaming('STORY_DEVELOPMENT', context);
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -640,14 +732,19 @@ export default function StoryDevelopment() {
           
           <div className="space-y-2">
             {chatItems.map((item, index) => (
-              <StoryBlock
-                key={item.id}
-                type={item.type}
-                text={index <= activeItemIndex ? item.currentText || '' : ''}
-                speaker={item.speaker}
-                isTyping={index === activeItemIndex && !item.isComplete}
-                evidence={item.evidence}
-              />
+              <div 
+                key={item.id} 
+                className={item.text.startsWith('Chapter') ? 
+                  'text-2xl font-bold text-stone-800 mt-8 mb-4 border-b pb-2' : ''}
+              >
+                <StoryBlock
+                  type={item.type}
+                  text={item.currentText}
+                  speaker={item.speaker}
+                  isTyping={false}
+                  evidence={item.evidence}
+                />
+              </div>
             ))}
             <div ref={storyEndRef} />
           </div>
@@ -674,6 +771,7 @@ export default function StoryDevelopment() {
                     action={action}
                     onSolve={() => handleAction(action)}
                     evidence={evidence}
+                    onChapterProgress={handleChapterProgression}
                   />
                 ))}
               </div>

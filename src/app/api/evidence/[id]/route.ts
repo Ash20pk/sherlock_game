@@ -17,7 +17,7 @@ export async function GET(
     const solution = searchParams.get('solution');
 
     const response = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
+      model: "gpt-4",
       messages: [
         {
           role: "system",
@@ -27,6 +27,7 @@ export async function GET(
           Type: ${evidenceType}
           Title: ${title}
           Content: ${content}
+          Solution: ${solution}
           
           Requirements:
           1. Generate appropriate metadata (date, location, case number)
@@ -36,7 +37,8 @@ export async function GET(
           5. Return content in valid JSON format with:
              - metadata: { date, location, caseNumber }
              - description: brief summary
-             - content: main evidence text`
+             - content-type: evidence type
+             - content: main evidence text, if it's a symbol return the symbol, if it's a map return the cordinates, if it's a photo return link like this: https://www.pexels.com/search/{keyword}/`
         }
       ],
       temperature: 0.7,
