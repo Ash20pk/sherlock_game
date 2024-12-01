@@ -17,7 +17,7 @@ interface ChatItem {
 
 const EvidenceDisplay: React.FC<{ evidence: Evidence }> = ({ evidence }) => {
   return (
-    <div className="p-3 border-2 border-amber-100 rounded-lg">
+    <div className="p-3 border-2 rounded-lg">
       <div className="font-medium text-stone-900">{evidence.title}</div>
       <div className="text-stone-700 mt-1">
         {typeof evidence.content === 'object' && evidence.content.text ? evidence.content.text : evidence.content}
@@ -60,9 +60,9 @@ const StoryBlock = ({
       case 'narrative':
         return 'mb-6';
       case 'deduction':
-        return 'mb-6 pl-4 border-l-4 border-stone-300';
+        return 'mt-6 mb-6 pl-4 border-l-4 border-stone-300';
       case 'dialogue':
-        return 'mb-3';
+        return 'mb-6';
       default:
         return 'mb-3';
     }
