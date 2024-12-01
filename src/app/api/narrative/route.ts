@@ -23,7 +23,7 @@ const NARRATIVE_PROMPTS = {
   - Watson's medical or practical insights
   Maintain Holmes's precise, analytical manner of speaking.`,
 
-  STORY_DEVELOPMENT: `Develop the story with new revelations and developments, incorporating interactive challenges for Watson, the story moves forward with every chapter. Make sure action and challenges are not together, choose one of them at a time. Include:
+  STORY_DEVELOPMENT: `Develop the story with new revelations and developments, incorporating interactive challenges for Watson, the story moves forward with every chapter. Make sure to return only 1 type of interactive element at a time. Include:
 
   Story Elements:
   - New information coming to light
@@ -33,7 +33,7 @@ const NARRATIVE_PROMPTS = {
   - Story develops with narrowing down the suspects
   - Emerging patterns or contradictions
   - Evidence content should be something text based something which can be decoded by words not pictures, always include it with the evidence
-  - Only 1 type of interactive challenge should be returned (e.g., action, riddle, puzzle, medical, observation, etc.)
+  - Only 1 type of interactive element should be returned (e.g., action, riddle, puzzle, medical, observation, etc.)
 
   Interactive Elements (choose only 1 based on context):
   1. Actions:
@@ -135,11 +135,11 @@ For the HOLMES_INITIAL_REACTION phase, please render the narrative, dialogueEntr
 
 Please provide your response in valid JSON format with the following structure:
 {
+  "chapterTitle": "Name of the chapter, don't include chapter number", (Only for STORY_DEVELOPMENT phase)
   "narrative": "The main narrative text",
   "dialogueEntries": [
     {"speaker": "HOLMES/WATSON/NARRATOR/LESTRADE/WITNESS/{Other characters}", "text": "Their words"}
   ],
-  "chapterTitle": "Name of the chapter",
   "deductions": [
     {
       "observation": "What was observed",

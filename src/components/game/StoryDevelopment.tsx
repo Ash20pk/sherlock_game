@@ -15,72 +15,15 @@ interface ChatItem {
   evidence?: Evidence;
 }
 
-interface ActionButtonProps {
-  action: Action;
-  onClick: () => void;
-  disabled?: boolean;
-  evidence?: Evidence[];
-}
-
-interface Challenge {
-  type: 'action' | 'riddle' | 'puzzle' | 'medical' | 'observation' | 'logic' | 'physical';
-  question: string;
-  hints: string[];
-  solution: string;
-  difficulty: 'EASY' | 'MEDIUM' | 'HARD';
-}
-
-interface Reward {
-  type: 'EVIDENCE' | 'DEDUCTION' | 'LOCATION';
-  description: string;
-  evidence?: Evidence[];
-  deductions?: DeductionEntry[];
-}
-
-const ActionButton: React.FC<ActionButtonProps> = ({ action, onClick, disabled, evidence }) => {
-  const canUseAction = !action.requiresEvidence || 
-    (evidence && action.requiresEvidence.every(reqId => 
-      evidence.some(e => e.id === reqId)
-    ));
-
-  return (
-    <motion.button
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      whileHover={{ scale: 1.02 }}
-      onClick={onClick}
-      disabled={disabled || !canUseAction}
-      className={`w-full p-4 rounded-lg border-2 text-left transition-colors duration-200 ${
-        canUseAction
-          ? 'border-stone-800 hover:bg-stone-100 text-stone-800'
-          : 'border-stone-300 text-stone-400 cursor-not-allowed'
-      }`}
-    >
-      <div className="font-medium">{action.text}</div>
-      {action.requiresEvidence && (
-        <div className="text-sm mt-1 text-stone-500">
-          {canUseAction 
-            ? "Required evidence available"
-            : "Requires additional evidence"}
-        </div>
-      )}
-    </motion.button>
-  );
-};
-
 const EvidenceDisplay: React.FC<{ evidence: Evidence }> = ({ evidence }) => {
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="p-4 rounded-lg border-2 border-stone-200 bg-stone-50"
-    >
+    <div className="p-3 border-2 border-amber-100 rounded-lg">
       <div className="font-medium text-stone-900">{evidence.title}</div>
-      <div className="text-stone-600 mt-1">
+      <div className="text-stone-700 mt-1">
         {typeof evidence.content === 'object' && evidence.content.text ? evidence.content.text : evidence.content}
       </div>
       <div className="text-sm text-stone-500 mt-2">Type: {evidence.type}</div>
-    </motion.div>
+    </div>
   );
 };
 
@@ -103,12 +46,25 @@ const StoryBlock = ({
         return 'text-stone-800';
       case 'dialogue':
         return 'text-stone-900';
-      case 'deduction':
-        return 'italic text-stone-800';
       case 'evidence':
-        return 'text-stone-800 font-medium';
+        return 'text-amber-800';
+      case 'deduction':
+        return 'text-stone-800 italic';
       default:
         return 'text-stone-800';
+    }
+  };
+
+  const getBlockStyle = () => {
+    switch (type) {
+      case 'narrative':
+        return 'mb-6';
+      case 'deduction':
+        return 'mb-6 pl-4 border-l-4 border-stone-300';
+      case 'dialogue':
+        return 'mb-3';
+      default:
+        return 'mb-3';
     }
   };
 
@@ -116,10 +72,10 @@ const StoryBlock = ({
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="my-6"
+      className={getBlockStyle()}
     >
       {type === 'dialogue' && speaker && (
-        <div className="text-stone-600 mb-2 tracking-wide">
+        <div className="text-stone-600 mb-1 tracking-wide font-medium">
           {speaker}:
         </div>
       )}
@@ -129,11 +85,6 @@ const StoryBlock = ({
           <span className="inline-block w-1 h-4 ml-1 bg-stone-400 animate-pulse" />
         )}
       </div>
-      {type === 'evidence' && evidence && (
-        <div className="mt-4">
-          <EvidenceDisplay evidence={evidence} />
-        </div>
-      )}
     </motion.div>
   );
 };
@@ -543,29 +494,63 @@ const ChallengeCard: React.FC<{
 
 export default function StoryDevelopment() {
   const { 
-    setPhase, 
-    addDialogue, 
-    addDeduction,
-    dialogueHistory,
-    availableActions,
-    evidence,
-    setAvailableActions,
+    setPhase,
+    addDialogue,
     addEvidence,
-    useEvidence
-  } = useGameStore();
+    setAvailableActions,
+    dialogueHistory,
+    evidence,
+  } = useGameStore()
   
-  const [chatItems, setChatItems] = useState<ChatItem[]>([]);
-  const [activeItemIndex, setActiveItemIndex] = useState<number>(0);
-  const [currentChapter, setCurrentChapter] = useState<number>(1);
-  const [isAllComplete, setIsAllComplete] = useState(false);
-  const [showActions, setShowActions] = useState(false);
-  const storyEndRef = useRef<HTMLDivElement>(null);
-  const { streamingState, startStreaming, stopStreaming } = useStreamingResponse();
-  const typingSpeed = 40;
+  const [chatItems, setChatItems] = useState<ChatItem[]>([])
+  const [activeItemIndex, setActiveItemIndex] = useState<number>(0)
+  const [isAllComplete, setIsAllComplete] = useState(false)
+  const [availableActions, setLocalAvailableActions] = useState<Action[]>([])
+  const [currentChapter, setCurrentChapter] = useState<number>(1)
+  const storyEndRef = useRef<HTMLDivElement>(null)
+  const { streamingState, startStreaming, stopStreaming } = useStreamingResponse()
+  const typingSpeed = 40
 
   useEffect(() => {
-    storyEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chatItems, activeItemIndex]);
+    storyEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [chatItems, activeItemIndex])
+
+  const handleActionSolved = async (actionId: string) => {
+    const action = availableActions.find(a => a.id === actionId);
+    if (!action) return;
+
+    // Add any evidence from the action
+    if (action.reward?.evidence) {
+      addEvidence(action.reward.evidence);
+    }
+
+    // Add any dialogue from the action
+    if (action.reward?.dialogue) {
+      addDialogue(action.reward.dialogue);
+    }
+
+    // Remove the solved action from available actions
+    const updatedActions = availableActions.filter(a => a.id !== actionId);
+    setLocalAvailableActions(updatedActions);
+    setAvailableActions(updatedActions);
+  };
+
+  const handleChapterProgression = () => {
+    // Check if we're at the final chapter
+    if (currentChapter >= 6) {
+      setPhase('CASE_CONCLUSION');
+    } else {
+      setCurrentChapter(prev => prev + 1);
+      // Start streaming next chapter content
+      startStreaming('STORY_DEVELOPMENT', {
+        phase: 'STORY_DEVELOPMENT',
+        chapter: currentChapter + 1,
+        currentLocation: '221B Baker Street',
+        recentDialogue: dialogueHistory,
+        evidence,
+      });
+    }
+  };
 
   useEffect(() => {
     startStreaming('STORY_DEVELOPMENT', {
@@ -573,7 +558,7 @@ export default function StoryDevelopment() {
       chapter: currentChapter,
       currentLocation: '221B Baker Street',
       recentDialogue: dialogueHistory,
-      evidence: evidence,
+      evidence,
     });
 
     return () => {
@@ -583,18 +568,7 @@ export default function StoryDevelopment() {
 
   // Handle streaming response updates
   useEffect(() => {
-    if (streamingState.fullResponse) {
-      // Add chapter header if chapterTitle is available
-      if (streamingState.fullResponse.chapterTitle && 
-          !chatItems.some(item => item.id === `chapter-${currentChapter}`)) {
-        setChatItems(prev => [...prev, {
-          id: `chapter-${currentChapter}`,
-          type: 'narrative',
-          text: `Chapter ${currentChapter}: ${streamingState.fullResponse.chapterTitle}`,
-          currentText: `Chapter ${currentChapter}: ${streamingState.fullResponse.chapterTitle}`,
-          isComplete: true
-        }]);
-      }
+    if (streamingState.fullResponse) {      
 
       // Handle dialogue entries
       streamingState.fullResponse.dialogueEntries?.forEach(entry => {
@@ -626,12 +600,6 @@ export default function StoryDevelopment() {
             currentText: deductionText,
             isComplete: true
           }]);
-          addDeduction({
-            conclusion: deduction.conclusion,
-            observation: deduction.observation,
-            timestamp: new Date().toISOString(),
-            author: deduction.author || 'HOLMES'
-          });
         }
       });
 
@@ -652,36 +620,11 @@ export default function StoryDevelopment() {
 
       // Update available actions
       if (streamingState.fullResponse.availableActions) {
+        setLocalAvailableActions(streamingState.fullResponse.availableActions);
         setAvailableActions(streamingState.fullResponse.availableActions);
-        setShowActions(true);
       }
     }
   }, [streamingState.fullResponse, currentChapter]);
-
-  // Handle chapter progression
-  const handleChapterProgression = useCallback((actionContext?: {
-    type: 'ACTION' | 'RIDDLE' | 'PUZZLE' | 'MEDICAL' | 'OBSERVATION' | 'LOGIC' | 'PHYSICAL';
-    text?: string;
-    chosenAction?: string;
-    question?: string;
-    solution?: string;
-  }) => {
-    setCurrentChapter(prev => prev + 1);
-    if (currentChapter < 6) {
-      // Start streaming next chapter content
-      startStreaming('STORY_DEVELOPMENT', {
-        phase: 'STORY_DEVELOPMENT',
-        chapter: currentChapter + 1,
-        currentLocation: '221B Baker Street',
-        recentDialogue: dialogueHistory,
-        evidence,
-        lastAction: actionContext
-      });
-    } else {
-      // Move to next phase after chapter 6
-      setPhase('CASE_CONCLUSION');
-    }
-  }, [currentChapter, dialogueHistory, evidence, setPhase, startStreaming]);
 
   // Handle streaming text animation
   useEffect(() => {
@@ -731,25 +674,24 @@ export default function StoryDevelopment() {
     }
   }, [streamingState.narrative]);
 
+  console.log(chatItems);
   // Check if all items are complete
   useEffect(() => {
     if (chatItems.length > 0 && chatItems.every(item => item.isComplete)) {
       setIsAllComplete(true);
       // Add small delay before showing actions
       const timer = setTimeout(() => {
-        setShowActions(true);
+        setLocalAvailableActions(availableActions);
       }, 1000);
       return () => clearTimeout(timer);
     }
   }, [chatItems]);
 
   const handleAction = async (action: Action) => {
-    setShowActions(false);
-    
     // If action requires evidence, mark it as used
     if (action.requiresEvidence) {
       action.requiresEvidence.forEach(evidenceId => {
-        useEvidence(evidenceId, action.id);
+        // useEvidence(evidenceId, action.id);
       });
     }
 
@@ -784,7 +726,9 @@ export default function StoryDevelopment() {
     if (streamingState.fullResponse?.selectedAction) {
       const { unlockedEvidence, unlockedDeductions } = streamingState.fullResponse.selectedAction;
       unlockedEvidence?.forEach(evidence => addEvidence(evidence));
-      unlockedDeductions?.forEach(deduction => addDeduction(deduction));
+      unlockedDeductions?.forEach(deduction => {
+        // addDeduction(deduction);
+      });
     }
   };
 
@@ -801,65 +745,86 @@ export default function StoryDevelopment() {
   };
 
   return (
-    <motion.div
+    <motion.div 
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="min-h-screen bg-stone-50"
+      className="min-h-screen bg-stone-50 px-4 py-8 md:py-12"
     >
-      <div className="max-w-3xl mx-auto px-4 py-12 md:py-16">
-        <div className="prose prose-stone prose-lg max-w-none">
-          <div className="text-sm text-stone-500 mb-8">
+      {/* Chapter Title */}
+      {streamingState.fullResponse?.chapterTitle && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="max-w-3xl mx-auto mb-12 text-center"
+        >
+          <h2 className="text-3xl font-serif text-stone-800 mb-4">
+            Chapter {currentChapter}: {streamingState.fullResponse.chapterTitle}
+          </h2>
+          <div className="text-stone-600">
             {streamingState.fullResponse?.currentLocation || '221B Baker Street'}
           </div>
-          
-          <div className="space-y-2">
-            {chatItems.map((item, index) => (
-              <div 
-                key={item.id} 
-                className={item.text.startsWith('Chapter') ? 
-                  'text-2xl font-bold text-stone-800 mt-8 mb-4 border-b pb-2' : ''}
+          <div className="w-32 h-1 bg-stone-200 mx-auto mt-4 rounded-full" />
+        </motion.div>
+      )}
+
+      <div className="max-w-3xl mx-auto">
+        <div className="space-y-0">
+          {/* Group items by type */}
+          {chatItems.map((item, index) => {
+            // Skip if it's not the active item and we're still typing
+            if (index > activeItemIndex && !isAllComplete) return null;
+
+            return (
+              <motion.div
+                key={item.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="px-3"
               >
+                {/* Use StoryBlock for all content types */}
                 <StoryBlock
                   type={item.type}
                   text={item.currentText}
                   speaker={item.speaker}
-                  isTyping={false}
+                  isTyping={index === activeItemIndex && !isAllComplete}
                   evidence={item.evidence}
                 />
-              </div>
-            ))}
-            <div ref={storyEndRef} />
-          </div>
 
-          {streamingState.error && (
-            <div className="text-red-600 mt-8">
-              {streamingState.error}
-            </div>
-          )}
+                {/* Evidence Display */}
+                {item.type === 'evidence' && item.evidence && (
+                  <div className="mt-2 mb-8">
+                    <EvidenceDisplay evidence={item.evidence} />
+                  </div>
+                )}
+              </motion.div>
+            );
+          })}
 
-          {showActions && availableActions.length > 0 && (
-            <motion.div 
+          {/* Actions/Challenges Section */}
+          {isAllComplete && availableActions.length > 0 && (
+            <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mt-12 space-y-8"
+              transition={{ delay: 0.5 }}
+              className="mt-16"
             >
-              <div className="text-center text-lg text-stone-600 mb-6">
-                Dr. Watson's Challenges
+              <div className="text-lg font-medium text-stone-800 mb-6 flex items-center">
+                <span className="mr-2">Your Next Move</span>
+                <div className="flex-grow h-px bg-stone-200" />
               </div>
-              <div className="grid gap-6">
-                {availableActions.map(action => (
-                  <ChallengeCard
-                    key={action.id}
-                    action={action}
-                    onSolve={() => handleAction(action)}
-                    evidence={evidence}
-                    onChapterProgress={handleChapterProgression}
-                  />
-                ))}
-              </div>
+              {availableActions.map(action => (
+                <ChallengeCard
+                  key={action.id}
+                  action={action}
+                  onSolve={() => handleActionSolved(action.id)}
+                  evidence={evidence}
+                  onChapterProgress={handleChapterProgression}
+                />
+              ))}
             </motion.div>
           )}
         </div>
+        <div ref={storyEndRef} />
       </div>
     </motion.div>
   );
