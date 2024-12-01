@@ -23,7 +23,7 @@ interface ActionButtonProps {
 }
 
 interface Challenge {
-  type: 'action' | 'riddle' | 'puzzle' | 'medical' | 'observation';
+  type: 'action' | 'riddle' | 'puzzle' | 'medical' | 'observation' | 'logic' | 'physical';
   question: string;
   hints: string[];
   solution: string;
@@ -76,7 +76,9 @@ const EvidenceDisplay: React.FC<{ evidence: Evidence }> = ({ evidence }) => {
       className="p-4 rounded-lg border-2 border-stone-200 bg-stone-50"
     >
       <div className="font-medium text-stone-900">{evidence.title}</div>
-      <div className="text-stone-600 mt-1">{evidence.description}</div>
+      <div className="text-stone-600 mt-1">
+        {typeof evidence.content === 'object' && evidence.content.text ? evidence.content.text : evidence.content}
+      </div>
       <div className="text-sm text-stone-500 mt-2">Type: {evidence.type}</div>
     </motion.div>
   );
@@ -304,7 +306,13 @@ const ChallengeCard: React.FC<{
   action: Action;
   onSolve: () => void;
   evidence?: Evidence[];
-  onChapterProgress: () => void;
+  onChapterProgress: (actionContext?: {
+    type: 'ACTION' | 'RIDDLE' | 'PUZZLE' | 'MEDICAL' | 'OBSERVATION' | 'LOGIC' | 'PHYSICAL';
+    text?: string;
+    chosenAction?: string;
+    question?: string;
+    solution?: string;
+  }) => void;
 }> = ({ action, onSolve, evidence, onChapterProgress }) => {
   const [attempt, setAttempt] = useState('');
   const [showHints, setShowHints] = useState(false);
@@ -328,13 +336,17 @@ const ChallengeCard: React.FC<{
   };
 
   const handleSubmit = () => {
-    const similarity = calculateSimilarity(attempt, action.challenge.solution);
+    const similarity = calculateSimilarity(attempt, action.challenge?.solution || '');
     // Consider it correct if similarity is above 0.1 (10% similar)
     if (similarity >= 0.1) {
       setIsCorrect(true);
       onSolve();
       // Progress to next chapter
-      onChapterProgress();
+      onChapterProgress({
+        type: action.type,
+        question: action.challenge?.question || action.text,
+        solution: attempt
+      });
     } else {
       // Optional: Add feedback for incorrect answers
       alert("That's not quite right. Try again!");
@@ -362,33 +374,95 @@ const ChallengeCard: React.FC<{
 
         <div className="prose prose-stone prose-sm">
           <div className="text-stone-800 font-medium mb-4">
-            {action.challenge.question}
+            {action.action?.text || action.text}
           </div>
 
-          <div className="mt-6">
-            <button
-              onClick={onSolve}
-              className="w-full px-4 py-3 bg-stone-800 text-white rounded-lg hover:bg-stone-700 
-                       transition-colors duration-200 font-medium tracking-wide text-center"
-            >
-              Take This Action
-            </button>
+          <div className="space-y-3">
+            {action.action?.actionOptions?.map((option, index) => (
+              <button
+                key={index}
+                onClick={() => {
+                  onSolve();
+                  onChapterProgress({
+                    type: action.type,
+                    text: action.action?.text || action.text,
+                    chosenAction: option
+                  });
+                }}
+                className="w-full px-4 py-3 bg-stone-800 text-white rounded-lg hover:bg-stone-700 
+                         transition-colors duration-200 font-medium tracking-wide text-center"
+              >
+                {option}
+              </button>
+            ))}
           </div>
         </div>
       </motion.div>
     );
   }
 
-  // Original challenge card for non-ACTION types
+  // Get challenge type specific UI elements
+  const getChallengeTypeUI = () => {
+    switch (action.type) {
+      case 'RIDDLE':
+        return (
+          <div className="mb-4 p-4 bg-amber-50 rounded-lg">
+            <div className="text-amber-800 font-medium">🔍 Riddle Challenge</div>
+            <div className="text-amber-700 mt-1 text-sm">Decode the hidden message...</div>
+          </div>
+        );
+      case 'PUZZLE':
+        return (
+          <div className="mb-4 p-4 bg-indigo-50 rounded-lg">
+            <div className="text-indigo-800 font-medium">🧩 Puzzle Challenge</div>
+            <div className="text-indigo-700 mt-1 text-sm">Solve the intricate puzzle...</div>
+          </div>
+        );
+      case 'MEDICAL':
+        return (
+          <div className="mb-4 p-4 bg-red-50 rounded-lg">
+            <div className="text-red-800 font-medium">⚕️ Medical Challenge</div>
+            <div className="text-red-700 mt-1 text-sm">Analyze the medical evidence...</div>
+          </div>
+        );
+      case 'OBSERVATION':
+        return (
+          <div className="mb-4 p-4 bg-emerald-50 rounded-lg">
+            <div className="text-emerald-800 font-medium">👁️ Observation Challenge</div>
+            <div className="text-emerald-700 mt-1 text-sm">Notice the crucial details...</div>
+          </div>
+        );
+      case 'LOGIC':
+        return (
+          <div className="mb-4 p-4 bg-blue-50 rounded-lg">
+            <div className="text-blue-800 font-medium">🧠 Logic Challenge</div>
+            <div className="text-blue-700 mt-1 text-sm">Connect the logical pieces...</div>
+          </div>
+        );
+      case 'PHYSICAL':
+        return (
+          <div className="mb-4 p-4 bg-purple-50 rounded-lg">
+            <div className="text-purple-800 font-medium">💪 Physical Challenge</div>
+            <div className="text-purple-700 mt-1 text-sm">Examine the physical evidence...</div>
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
+
+  // Challenge card for all other types
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       className="p-6 bg-white rounded-lg shadow-sm border-2 border-stone-100"
     >
+      {getChallengeTypeUI()}
+
       <div className="flex justify-between items-start mb-4">
         <h3 className="text-lg font-medium text-stone-900">{action.text}</h3>
-        <DifficultyBadge difficulty={action.challenge.difficulty} />
+        <DifficultyBadge difficulty={action.challenge?.difficulty || 'EASY'} />
       </div>
 
       {evidence && evidence.length > 0 && (
@@ -404,50 +478,51 @@ const ChallengeCard: React.FC<{
 
       <div className="prose prose-stone prose-sm">
         <div className="text-stone-800 font-medium mb-4">
-          {action.challenge.question}
+          {action.challenge?.question || action.text}
         </div>
 
         {showHints && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="mt-4"
+            className="mt-4 p-4 bg-stone-50 rounded-lg"
           >
             <div className="text-stone-600 font-medium mb-2">Hints:</div>
             <ul className="list-disc pl-4 space-y-1">
-              {action.challenge.hints.map((hint, index) => (
+              {action.challenge?.hints?.map((hint, index) => (
                 <li key={index} className="text-stone-600">{hint}</li>
               ))}
             </ul>
           </motion.div>
         )}
 
-        {!isCorrect && (
-          <div className="mt-6 space-y-4">
-            <textarea
-              value={attempt}
-              onChange={(e) => setAttempt(e.target.value)}
-              placeholder="Enter your solution..."
-              className="w-full p-3 border-2 border-stone-200 rounded-lg focus:border-stone-800 focus:ring-0 transition-colors"
-              rows={3}
-            />
-            <div className="flex justify-between items-center">
-              <button
-                onClick={() => setShowHints(!showHints)}
-                className="text-stone-600 text-sm hover:text-stone-800"
-              >
-                {showHints ? 'Hide Hints' : 'Show Hints'}
-              </button>
-              <button
-                onClick={handleSubmit}
-                className="px-4 py-2 bg-stone-800 text-white rounded-lg hover:bg-stone-700 
-                         transition-colors duration-200 font-medium tracking-wide"
-              >
-                Submit Solution
-              </button>
-            </div>
+        <div className="mt-6 space-y-4">
+          <textarea
+            value={attempt}
+            onChange={(e) => setAttempt(e.target.value)}
+            placeholder="Enter your solution..."
+            className="w-full p-3 border-2 border-stone-200 rounded-lg focus:border-stone-400 
+                     focus:ring-0 transition-colors duration-200"
+            rows={3}
+          />
+
+          <div className="flex justify-between items-center">
+            <button
+              onClick={() => setShowHints(!showHints)}
+              className="text-stone-600 hover:text-stone-800 transition-colors duration-200"
+            >
+              {showHints ? 'Hide Hints' : 'Show Hints'}
+            </button>
+
+            <button
+              onClick={handleSubmit}
+              className="px-4 py-2 bg-stone-800 text-white rounded-lg hover:bg-stone-700 
+                       transition-colors duration-200"
+            >
+              Submit Solution
+            </button>
           </div>
-        )}
+        </div>
 
         {isCorrect && (
           <motion.div
@@ -457,7 +532,7 @@ const ChallengeCard: React.FC<{
           >
             <div className="font-medium">Correct!</div>
             <div className="text-sm mt-1">
-              Reward: {action.reward.description}
+              Reward: {action.reward?.description || ''}
             </div>
           </motion.div>
         )}
@@ -584,20 +659,27 @@ export default function StoryDevelopment() {
   }, [streamingState.fullResponse, currentChapter]);
 
   // Handle chapter progression
-  const handleChapterProgression = useCallback(() => {
+  const handleChapterProgression = useCallback((actionContext?: {
+    type: 'ACTION' | 'RIDDLE' | 'PUZZLE' | 'MEDICAL' | 'OBSERVATION' | 'LOGIC' | 'PHYSICAL';
+    text?: string;
+    chosenAction?: string;
+    question?: string;
+    solution?: string;
+  }) => {
     setCurrentChapter(prev => prev + 1);
-    if (currentChapter < 3) {
+    if (currentChapter < 6) {
       // Start streaming next chapter content
       startStreaming('STORY_DEVELOPMENT', {
         phase: 'STORY_DEVELOPMENT',
         chapter: currentChapter + 1,
         currentLocation: '221B Baker Street',
         recentDialogue: dialogueHistory,
-        evidence: evidence,
+        evidence,
+        lastAction: actionContext
       });
     } else {
-      // Move to next phase after chapter 3
-      setPhase('HOLMES_INVESTIGATION');
+      // Move to next phase after chapter 6
+      setPhase('CASE_CONCLUSION');
     }
   }, [currentChapter, dialogueHistory, evidence, setPhase, startStreaming]);
 

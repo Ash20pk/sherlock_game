@@ -9,119 +9,101 @@ const openai = new OpenAI({
 // Narrative prompts for different game phases
 const NARRATIVE_PROMPTS = {
   NARRATOR_INTRODUCTION: `Set the Victorian noir atmosphere for our Sherlock Holmes case. Include:
-- Rich description of London's atmosphere
-- Time of day and weather
-- Brief mention of recent events leading to the case
-- Introduction of the initial mystery or crime
-Write in a classic noir narrative style.`,
+  - Rich description of London's atmosphere
+  - Time of day and weather
+  - Brief mention of recent events leading to the case
+  - Introduction of the initial mystery or crime
+  Write in a classic noir narrative style.`,
 
   HOLMES_INITIAL_REACTION: `Write Holmes's initial reaction to the case in his characteristic style. Include:
-- His first deductions from the initial information
-- A brief exchange with Watson
-- His immediate thoughts on the case's peculiarities
-- Any preliminary hypotheses
-- Watson's medical or practical insights
-Maintain Holmes's precise, analytical manner of speaking.`,
+  - His first deductions from the initial information
+  - A brief exchange with Watson
+  - His immediate thoughts on the case's peculiarities
+  - Any preliminary hypotheses
+  - Watson's medical or practical insights
+  Maintain Holmes's precise, analytical manner of speaking.`,
 
-  STORY_DEVELOPMENT: `Develop the story with new revelations and developments, incorporating interactive challenges for Watson, the story moves forward with every chapter. Include:
+  STORY_DEVELOPMENT: `Develop the story with new revelations and developments, incorporating interactive challenges for Watson, the story moves forward with every chapter. Make sure action and challenges are not together, choose one of them at a time. Include:
 
-Story Elements:
-- New information coming to light
-- Character interactions and witness accounts
-- Environmental details and atmosphere
-- Emerging patterns or contradictions
-- Evidence content should be something text based something which can be decoded by words not pictures, always include it with the evidence
-- Only 1 type of interactive challenge should be returned (e.g., action, riddle, puzzle, medical, observation, etc.)
+  Story Elements:
+  - New information coming to light
+  - Character interactions and witness accounts
+  - Environmental details and atmosphere
+  - Introduce character as suspects or witnesses
+  - Story develops with narrowing down the suspects
+  - Emerging patterns or contradictions
+  - Evidence content should be something text based something which can be decoded by words not pictures, always include it with the evidence
+  - Only 1 type of interactive challenge should be returned (e.g., action, riddle, puzzle, medical, observation, etc.)
 
-Interactive Elements (choose 2-4 based on context):
-1. Actions:
-   - Options for Watson to choose for story development which leads to the other challenges
-   - This should cover 50% of the narrative
+  Interactive Elements (choose only 1 based on context):
+  1. Actions:
+    - Options for Watson to choose for story development which leads to the other challenges
+    - This should cover 50% of the narrative
 
-2. Riddles:
-   - Cryptic messages left by suspects
-   - Hidden meanings in newspaper clippings
-   - Symbolic patterns at crime scenes
-   
-3. Puzzles:
-   - Locked boxes with combination mechanisms
-   - Coded messages requiring decryption
-   - Pattern-based security systems
-   
-4. Medical Challenges:
-   - Analyzing unusual symptoms
-   - Identifying specific poisons
-   - Examining wound patterns
-   
-5. Observation Tests:
-   - Spotting inconsistencies in witness statements
-   - Finding hidden details in crime scene
-   - Noticing environmental anomalies
-   
-6. Logic Problems:
-   - Timeline reconstructions
-   - Suspect alibis verification
-   - Connection mapping between evidence
+  2. Riddles:
+    - Cryptic messages left by suspects
+    - Hidden meanings in newspaper clippings
+    - Symbolic patterns at crime scenes
+    
+  3. Puzzles:
+    - Locked boxes with combination mechanisms
+    - Coded messages requiring decryption
+    - Pattern-based security systems
+    
+  4. Medical Challenges:
+    - Analyzing unusual symptoms
+    - Identifying specific poisons
+    - Examining wound patterns
+    
+  5. Observation Tests:
+    - Spotting inconsistencies in witness statements
+    - Finding hidden details in crime scene
+    - Noticing environmental anomalies
+    
+  6. Logic Problems:
+    - Timeline reconstructions
+    - Suspect alibis verification
+    - Connection mapping between evidence
 
-7. Physical Challenges:
-   - Lock picking
-   - Following tracks
-   - Examining specific materials
+  7. Physical Challenges:
+    - Lock picking
+    - Following tracks
+    - Examining specific materials
 
-For each challenge:
-- Provide clear but subtle clues
-- Make them solvable using available evidence
-- Tie them to Watson's medical or military background
-- Ensure they advance the story meaningfully
+  For each challenge:
+  - Provide clear but subtle clues
+  - Make them solvable using available evidence
+  - Tie them to Watson's medical or military background
+  - Ensure they advance the story meaningfully
+  - Ensure each challenge is unique and different from the previous ones
+  - Ensure that the challenge is appropriate for the current narrative context
+  - This phase will have 60% ACTION types, 20% RIDDLE types, 10% PUZZLE types, 5% MEDICAL types, 5% OBSERVATION types, 5% LOGIC types, 5% PHYSICAL types
 
-Evidence Types to Include:
-- Medical findings (symptoms, injuries, substances)
-- Physical clues (footprints, fibers, marks)
-- Documents (letters, newspapers, telegrams)
-- Witness testimonies
-- Environmental details
+  Evidence Types to Include:
+  - Medical findings (symptoms, injuries, substances)
+  - Physical clues (footprints, fibers, marks)
+  - Documents (letters, newspapers, telegrams)
+  - Witness testimonies
+  - Environmental details
 
-Format actions as engaging challenges that require careful thought and deduction.
-Each action should feel like a mini-puzzle that contributes to the larger mystery.`,
-
-  HOLMES_INVESTIGATION: `Detail Holmes's and Watson's collaborative investigation process. Include:
-- Holmes's methodical examination of evidence
-- Watson's medical expertise and observations
-- Interactions with witnesses or suspects
-- Deductive reasoning from both Holmes and Watson
-- Discovery of crucial clues
-- Specific action choices for Watson based on available evidence
-Write with attention to both characters' investigative techniques.`,
+  Format actions as engaging challenges that require careful thought and deduction.
+  Each action should feel like a mini-puzzle that contributes to the larger mystery. The story development phase will have 6 chapters which leads to conclusion and epilogue phases.`,
 
   CASE_CONCLUSION: `Write the dramatic conclusion of the case. Include:
-- Holmes's masterful revelation of the complete case
-- Watson's contributions to solving the mystery
-- How different pieces of evidence came together
-- The significance of Watson's chosen actions
-- The culprit's reaction or capture
-- Final deductions from both Holmes and Watson
-Write with dramatic flair while acknowledging both characters' roles in solving the case.`,
+  - Holmes's masterful revelation of the complete case
+  - Watson's contributions to solving the mystery
+  - How different pieces of evidence came together
+  - The significance of Watson's chosen actions
+  - The culprit's reaction or capture
+  - Final deductions from both Holmes and Watson
+  Write with dramatic flair while acknowledging both characters' roles in solving the case.`,
 
   EPILOGUE: `Write the epilogue scene. Include:
-- Wrap-up of loose ends
-- Return to Baker Street
-- Holmes's final comments
-- Watson's closing thoughts
-Write with a sense of completion.`,
-
-  HOLMES_REFLECTION: `Write Holmes's reflection on the case. Include:
-- His thoughts on the case's complexities
-- How he pieced together the evidence
-- Any surprises or challenges he faced
-- His final thoughts on the case's outcome
-Write in a way that showcases Holmes's analytical mind.`,
-
-  WATSON_REFLECTION: `Write Watson's reflection on the case. Include:
-- His thoughts on his role in the investigation
-- How he contributed to solving the case
-- Any challenges or obstacles he faced
-- His final thoughts on the case's outcome
-Write in a way that showcases Watson's practical and empathetic nature.`,
+  - Wrap-up of loose ends
+  - Return to Baker Street
+  - Holmes's final comments
+  - Watson's closing thoughts
+  Write with a sense of completion.`,
 
 };
 
@@ -155,7 +137,7 @@ Please provide your response in valid JSON format with the following structure:
 {
   "narrative": "The main narrative text",
   "dialogueEntries": [
-    {"speaker": "HOLMES/WATSON/NARRATOR/LESTRADE/WITNESS", "text": "Their words"}
+    {"speaker": "HOLMES/WATSON/NARRATOR/LESTRADE/WITNESS/{Other characters}", "text": "Their words"}
   ],
   "chapterTitle": "Name of the chapter",
   "deductions": [
@@ -179,7 +161,7 @@ Please provide your response in valid JSON format with the following structure:
     {
     "id": "unique_id",
     "text": "Description of the challenge",
-    "type": "ACTION/RIDDLE/PUZZLE/MEDICAL/OBSERVATION/LOGIC/PHYSICAL" (choose one per chapter),
+    "type": "ACTION/RIDDLE/PUZZLE/MEDICAL/OBSERVATION/LOGIC/PHYSICAL" (Strictly only 1 type per chapter),
     "challenge": { (If type is not ACTION, include this object)
       "question": "The actual riddle or puzzle text, include the evidence contents as required",
       "hints": ["Subtle hint 1", "Subtle hint 2"],
@@ -205,7 +187,7 @@ Ensure your response is ONLY the JSON object, with no additional text before or 
       messages: [
         {
           role: "system",
-          content: "You are a Victorian-era narrator crafting a Sherlock Holmes mystery. You must respond with a valid JSON object containing the narrative elements."
+          content: "You are a Victorian-era narrator crafting a Sherlock Holmes mystery, each phase moves the story forward and each challenge should be related to the story and should be unique. You must respond with a valid JSON object containing the narrative elements."
         },
         {
           role: "user",

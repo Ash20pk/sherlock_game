@@ -4,7 +4,6 @@ export type GamePhase =
   | 'NARRATOR_INTRODUCTION'
   | 'HOLMES_INITIAL_REACTION'
   | 'STORY_DEVELOPMENT'
-  | 'HOLMES_INVESTIGATION'
   | 'CASE_CONCLUSION'
 
 interface DialogueEntry {
@@ -33,9 +32,22 @@ interface Evidence {
 interface Action {
   id: string
   text: string
-  type: 'INVESTIGATE' | 'USE_EVIDENCE' | 'QUESTION' | 'EXAMINE'
+  type: 'ACTION' | 'RIDDLE' | 'PUZZLE' | 'MEDICAL' | 'OBSERVATION' | 'LOGIC' | 'PHYSICAL'
+  action?: {
+    text: string
+    actionOptions: string[]
+  }
+  challenge?: {
+    question: string
+    hints: string[]
+    solution: string
+    difficulty: 'EASY' | 'MEDIUM' | 'HARD'
+  }
   requiresEvidence?: string[]
   availableFor: 'HOLMES' | 'WATSON' | 'BOTH'
+  reward?: {
+    description: string
+  }
 }
 
 interface GameState {

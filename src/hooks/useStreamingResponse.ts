@@ -46,6 +46,8 @@ export function useStreamingResponse() {
         signal: abortControllerRef.current.signal
       });
 
+
+      console.log(response)
       if (!response.ok) {
         throw new Error('Failed to start streaming');
       }
