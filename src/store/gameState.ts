@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 
 export type GamePhase = 
+  | 'TITLE_SCREEN'
   | 'NARRATOR_INTRODUCTION'
   | 'HOLMES_INITIAL_REACTION'
   | 'STORY_DEVELOPMENT'
@@ -67,7 +68,7 @@ interface GameState {
 }
 
 export const useGameStore = create<GameState>((set) => ({
-  phase: 'NARRATOR_INTRODUCTION',
+  phase: 'HOLMES_INITIAL_REACTION',
   dialogueHistory: [],
   deductions: [],
   evidence: [],

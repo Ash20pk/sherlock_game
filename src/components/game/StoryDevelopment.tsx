@@ -4,15 +4,17 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { useStreamingResponse } from '@/hooks/useStreamingResponse'
 import { Action, Evidence, DeductionEntry } from '@/store/gameState'
 import EvidenceReport  from './EvidenceReport'
+import { Loading } from './Loading'
 
 interface ChatItem {
   id: string;
-  type: 'narrative' | 'dialogue' | 'deduction' | 'evidence';
+  type: 'narrative' | 'dialogue' | 'deduction' | 'evidence' | 'chapter-title';
   text: string;
   currentText: string;
   speaker?: string;
   isComplete: boolean;
   evidence?: Evidence;
+  chapterNumber?: number;
 }
 
 const EvidenceDisplay: React.FC<{ evidence: Evidence }> = ({ evidence }) => {
@@ -43,7 +45,8 @@ const StoryBlock = ({
   const getTextStyle = () => {
     switch (type) {
       case 'narrative':
-        return 'text-stone-800';
+      case 'chapter-title':
+        return 'text-stone-800 font-serif';
       case 'dialogue':
         return 'text-stone-900';
       case 'evidence':
@@ -57,6 +60,8 @@ const StoryBlock = ({
 
   const getBlockStyle = () => {
     switch (type) {
+      case 'chapter-title':
+        return 'mb-8 text-center text-2xl';
       case 'narrative':
         return 'mb-6';
       case 'deduction':
@@ -507,6 +512,7 @@ export default function StoryDevelopment() {
   const [isAllComplete, setIsAllComplete] = useState(false)
   const [availableActions, setLocalAvailableActions] = useState<Action[]>([])
   const [currentChapter, setCurrentChapter] = useState<number>(1)
+  const [isLoading, setIsLoading] = useState(false)
   const storyEndRef = useRef<HTMLDivElement>(null)
   const { streamingState, startStreaming, stopStreaming } = useStreamingResponse()
   const typingSpeed = 40
@@ -533,32 +539,18 @@ export default function StoryDevelopment() {
     const updatedActions = availableActions.filter(a => a.id !== actionId);
     setLocalAvailableActions(updatedActions);
     setAvailableActions(updatedActions);
-  };
-
-  const handleChapterProgression = () => {
-    // Check if we're at the final chapter
-    if (currentChapter >= 6) {
-      setPhase('CASE_CONCLUSION');
-    } else {
-      setCurrentChapter(prev => prev + 1);
-      // Start streaming next chapter content
-      startStreaming('STORY_DEVELOPMENT', {
-        phase: 'STORY_DEVELOPMENT',
-        chapter: currentChapter + 1,
-        currentLocation: '221B Baker Street',
-        recentDialogue: dialogueHistory,
-        evidence,
-      });
-    }
-  };
+    };
 
   useEffect(() => {
+    setIsLoading(true);
     startStreaming('STORY_DEVELOPMENT', {
       phase: 'STORY_DEVELOPMENT',
       chapter: currentChapter,
       currentLocation: '221B Baker Street',
       recentDialogue: dialogueHistory,
       evidence,
+    }).then(() => {
+      setIsLoading(false);
     });
 
     return () => {
@@ -566,21 +558,75 @@ export default function StoryDevelopment() {
     };
   }, []);
 
-  // Handle streaming response updates
+  
+  // Update streaming response handling
   useEffect(() => {
-    if (streamingState.fullResponse) {      
+    if (streamingState.fullResponse) {     
+      console.log('Received streaming response:', streamingState.fullResponse); 
+      // Create array to hold new chat items for the current chapter
+      const newChatItems: ChatItem[] = [];
+      
+      // Add chapter title if it exists and hasn't been added for current chapter
+      if (streamingState.fullResponse.chapterTitle && 
+          !chatItems.some(item => 
+            item.type === 'chapter-title' && 
+            item.chapterNumber === currentChapter
+          )) {
+        newChatItems.push({
+          id: `chapter-${currentChapter}-title`,
+          type: 'chapter-title',
+          text: `Chapter ${currentChapter}: ${streamingState.fullResponse.chapterTitle}`,
+          currentText: `Chapter ${currentChapter}: ${streamingState.fullResponse.chapterTitle}`,
+          isComplete: true,
+          chapterNumber: currentChapter
+        });
+      }
 
-      // Handle dialogue entries
+      // Add narrative for current chapter - only if it doesn't exist yet
+      const narrativeExists = chatItems.some(item => 
+        item.type === 'narrative' && 
+        item.chapterNumber === currentChapter
+      );
+
+      if (streamingState.narrative && !narrativeExists) {
+        newChatItems.push({
+          id: `narrative-${currentChapter}`,
+          type: 'narrative',
+          text: streamingState.narrative,
+          currentText: '',  // Start empty for typing animation
+          isComplete: false,
+          chapterNumber: currentChapter
+        });
+      }
+
+      // Update existing narrative text if it exists
+      if (streamingState.narrative && narrativeExists) {
+        setChatItems(prev => prev.map(item => {
+          if (item.type === 'narrative' && item.chapterNumber === currentChapter) {
+            return {
+              ...item,
+              text: streamingState.narrative
+            };
+          }
+          return item;
+        }));
+      }
+
+      // Handle dialogue entries for current chapter - skip narrative entries
       streamingState.fullResponse.dialogueEntries?.forEach(entry => {
-        if (!chatItems.some(item => item.id === `dialogue-${entry.text}`)) {
-          setChatItems(prev => [...prev, {
-            id: `dialogue-${entry.text}`,
+        if (entry.speaker === 'NARRATOR') return; // Skip narrator entries as they're handled above
+        
+        const dialogueId = `dialogue-${currentChapter}-${entry.text}`;
+        if (!chatItems.some(item => item.id === dialogueId)) {
+          newChatItems.push({
+            id: dialogueId,
             type: 'dialogue',
             text: entry.text,
             currentText: entry.text,
             speaker: entry.speaker,
-            isComplete: true
-          }]);
+            isComplete: true,
+            chapterNumber: currentChapter
+          });
           addDialogue({
             text: entry.text,
             speaker: entry.speaker || '',
@@ -589,34 +635,73 @@ export default function StoryDevelopment() {
         }
       });
 
-      // Handle deductions
+      // Handle deductions for current chapter
       streamingState.fullResponse.deductions?.forEach(deduction => {
-        if (!chatItems.some(item => item.id === `deduction-${deduction.conclusion}`)) {
+        const deductionId = `deduction-${currentChapter}-${deduction.conclusion}`;
+        if (!chatItems.some(item => item.id === deductionId)) {
           const deductionText = `${deduction.conclusion}\n\nBased on: ${deduction.observation}`;
-          setChatItems(prev => [...prev, {
-            id: `deduction-${deduction.conclusion}`,
+          newChatItems.push({
+            id: deductionId,
             type: 'deduction',
             text: deductionText,
             currentText: deductionText,
-            isComplete: true
-          }]);
+            isComplete: true,
+            chapterNumber: currentChapter
+          });
         }
       });
 
-      // Handle evidence
+      // Handle evidence for current chapter
       streamingState.fullResponse.evidence?.forEach(evidenceItem => {
-        if (!chatItems.some(item => item.id === `evidence-${evidenceItem.id}`)) {
-          setChatItems(prev => [...prev, {
-            id: `evidence-${evidenceItem.id}`,
+        const evidenceId = `evidence-${currentChapter}-${evidenceItem.id}`;
+        if (!chatItems.some(item => item.id === evidenceId)) {
+          newChatItems.push({
+            id: evidenceId,
             type: 'evidence',
             text: `New Evidence Discovered: ${evidenceItem.title}`,
             currentText: `New Evidence Discovered: ${evidenceItem.title}`,
             isComplete: true,
-            evidence: evidenceItem
-          }]);
+            evidence: evidenceItem,
+            chapterNumber: currentChapter
+          });
           addEvidence(evidenceItem);
         }
       });
+
+      // Only update state if there are new items
+      if (newChatItems.length > 0) {
+        setChatItems(prev => {
+          let updatedItems = [...prev];
+          
+          // Handle chapter title separately - it always goes at index 0
+          const titleItem = newChatItems.find(item => item.type === 'chapter-title');
+          const otherItems = newChatItems.filter(item => item.type !== 'chapter-title');
+          
+          if (titleItem) {
+            if (prev.length === 0) {
+              updatedItems = [titleItem];
+            } else {
+              // Insert title at beginning
+              updatedItems.unshift(titleItem);
+            }
+          }
+          
+          // Find where the current chapter's content starts
+          const chapterStart = updatedItems.findIndex(
+            item => item.chapterNumber === currentChapter && item.type !== 'chapter-title'
+          );
+          
+          if (chapterStart === -1) {
+            // Append other items at the end
+            updatedItems = [...updatedItems, ...otherItems];
+          } else {
+            // Insert other items after the chapter's existing content
+            updatedItems.splice(chapterStart, 0, ...otherItems);
+          }
+          
+          return updatedItems;
+        });
+      }
 
       // Update available actions
       if (streamingState.fullResponse.availableActions) {
@@ -661,20 +746,6 @@ export default function StoryDevelopment() {
     }
   }, [chatItems, activeItemIndex]);
 
-  // Handle narrative updates
-  useEffect(() => {
-    if (streamingState.narrative && !chatItems.some(item => item.type === 'narrative')) {
-      setChatItems(prev => [...prev, {
-        id: 'narrative',
-        type: 'narrative',
-        text: streamingState.narrative,
-        currentText: '',
-        isComplete: false
-      }]);
-    }
-  }, [streamingState.narrative]);
-
-  console.log(chatItems);
   // Check if all items are complete
   useEffect(() => {
     if (chatItems.length > 0 && chatItems.every(item => item.isComplete)) {
@@ -686,6 +757,46 @@ export default function StoryDevelopment() {
       return () => clearTimeout(timer);
     }
   }, [chatItems]);
+
+  // Helper function to determine the correct insert position for new items
+  const getInsertIndex = (items: ChatItem[], type: string): number => {
+    const orderPriority: { [key: string]: number } = {
+      'chapter-title': 0,
+      'narrative': 1,
+      'dialogue': 2,
+      'deduction': 3,
+      'evidence': 4
+    };
+
+    const newItemPriority = orderPriority[type] || 999;
+    
+    for (let i = items.length - 1; i >= 0; i--) {
+      const currentPriority = orderPriority[items[i].type] || 999;
+      if (currentPriority <= newItemPriority) {
+        return i + 1;
+      }
+    }
+    return 0;
+  };
+
+  const handleChapterProgression = async () => {
+    if (currentChapter >= 6) {
+      setPhase('CASE_CONCLUSION');
+      return;
+    }
+
+    const nextChapter = currentChapter + 1;
+    setCurrentChapter(nextChapter);
+    
+    // Start streaming next chapter content while keeping previous chapters
+    await startStreaming('STORY_DEVELOPMENT', {
+      phase: 'STORY_DEVELOPMENT',
+      chapter: nextChapter,
+      currentLocation: '221B Baker Street',
+      recentDialogue: dialogueHistory,
+      evidence,
+    });
+  };
 
   const handleAction = async (action: Action) => {
     // If action requires evidence, mark it as used
@@ -750,82 +861,72 @@ export default function StoryDevelopment() {
       animate={{ opacity: 1 }}
       className="min-h-screen bg-stone-50 px-4 py-8 md:py-12"
     >
-      {/* Chapter Title */}
-      {streamingState.fullResponse?.chapterTitle && (
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="max-w-3xl mx-auto mb-12 text-center"
-        >
-          <h2 className="text-3xl font-serif text-stone-800 mb-4">
-            Chapter {currentChapter}: {streamingState.fullResponse.chapterTitle}
-          </h2>
-          <div className="text-stone-600">
-            {streamingState.fullResponse?.currentLocation || '221B Baker Street'}
-          </div>
-          <div className="w-32 h-1 bg-stone-200 mx-auto mt-4 rounded-full" />
-        </motion.div>
-      )}
-
-      <div className="max-w-3xl mx-auto">
-        <div className="space-y-0">
-          {/* Group items by type */}
-          {chatItems.map((item, index) => {
-            // Skip if it's not the active item and we're still typing
-            if (index > activeItemIndex && !isAllComplete) return null;
-
-            return (
-              <motion.div
-                key={item.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="px-3"
-              >
-                {/* Use StoryBlock for all content types */}
-                <StoryBlock
-                  type={item.type}
-                  text={item.currentText}
-                  speaker={item.speaker}
-                  isTyping={index === activeItemIndex && !isAllComplete}
-                  evidence={item.evidence}
-                />
-
-                {/* Evidence Display */}
-                {item.type === 'evidence' && item.evidence && (
-                  <div className="mt-2 mb-8">
-                    <EvidenceDisplay evidence={item.evidence} />
-                  </div>
-                )}
-              </motion.div>
-            );
-          })}
-
-          {/* Actions/Challenges Section */}
-          {isAllComplete && availableActions.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5 }}
-              className="mt-16"
-            >
-              <div className="text-lg font-medium text-stone-800 mb-6 flex items-center">
-                <span className="mr-2">Your Next Move</span>
-                <div className="flex-grow h-px bg-stone-200" />
-              </div>
-              {availableActions.map(action => (
-                <ChallengeCard
-                  key={action.id}
-                  action={action}
-                  onSolve={() => handleActionSolved(action.id)}
-                  evidence={evidence}
-                  onChapterProgress={handleChapterProgression}
-                />
-              ))}
-            </motion.div>
-          )}
+      {isLoading ? (
+        <div className="max-w-3xl mx-auto">
+          <Loading />
         </div>
-        <div ref={storyEndRef} />
-      </div>
+      ) : (
+        <div className="max-w-3xl mx-auto">
+          <div className="space-y-0">
+            {/* Group items by chapter and render them */}
+            {Array.from(new Set(chatItems.map(item => item.chapterNumber)))
+              .sort((a, b) => (a || 0) - (b || 0))
+              .map(chapterNum => (
+                <div key={`chapter-${chapterNum}`} className="mb-16">
+                  {chatItems
+                    .filter(item => item.chapterNumber === chapterNum)
+                    .map((item, index) => (
+                      <motion.div
+                        key={item.id}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="px-3"
+                      >
+                        <StoryBlock
+                          type={item.type}
+                          text={item.currentText}
+                          speaker={item.speaker}
+                          isTyping={!item.isComplete}
+                          evidence={item.evidence}
+                        />
+
+                        {item.type === 'evidence' && item.evidence && (
+                          <div className="mt-2 mb-8">
+                            <EvidenceDisplay evidence={item.evidence} />
+                          </div>
+                        )}
+                      </motion.div>
+                    ))}
+
+                  {/* Show challenge cards for current chapter only */}
+                  {chapterNum === currentChapter && availableActions.length > 0 && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.5 }}
+                      className="mt-16"
+                    >
+                      <div className="text-lg font-medium text-stone-800 mb-6 flex items-center">
+                        <span className="mr-2">Watson can you solve this challenge?</span>
+                        <div className="flex-grow h-px bg-stone-200" />
+                      </div>
+                      {availableActions.map(action => (
+                        <ChallengeCard
+                          key={action.id}
+                          action={action}
+                          onSolve={() => handleActionSolved(action.id)}
+                          evidence={evidence}
+                          onChapterProgress={handleChapterProgression}
+                        />
+                      ))}
+                    </motion.div>
+                  )}
+                </div>
+              ))}
+          </div>
+          <div ref={storyEndRef} />
+        </div>
+      )}
     </motion.div>
   );
 }

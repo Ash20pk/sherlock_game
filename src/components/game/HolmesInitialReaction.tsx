@@ -1,38 +1,18 @@
-import { motion } from 'framer-motion'
-import { useGameStore } from '@/store/gameState'
-import { useEffect, useState, useRef } from 'react'
-import { useStreamingResponse } from '@/hooks/useStreamingResponse'
+import React, { useState, useEffect, useRef } from 'react';
+import { motion } from 'framer-motion';
+import { useGameStore } from '@/store/gameState';
+import { useStreamingResponse } from '@/hooks/useStreamingResponse';
 
-interface ChatItem {
-  id: string;
-  type: 'narrative' | 'dialogue' | 'deduction';
-  text: string;
-  currentText: string;
-  speaker?: string;
-  isComplete: boolean;
-  conclusion?: string;
-  observation?: string;
-}
-
-const StoryBlock = ({ 
-  type,
-  text,
-  speaker,
-  isTyping,
-}: {
-  type: string;
-  text: string;
-  speaker?: string;
-  isTyping: boolean;
-}) => {
+const StoryBlock = ({ type, text, speaker, isTyping }) => {
+  console.log('Rendering StoryBlock:', { type, text, speaker, isTyping });
   const getTextStyle = () => {
     switch (type) {
       case 'narrative':
-        return 'text-stone-800';
+        return 'text-stone-800 prose prose-stone';
       case 'dialogue':
         return 'text-stone-900';
       case 'deduction':
-        return 'italic text-stone-800';
+        return 'italic text-stone-800 bg-amber-50 p-4 rounded-lg border border-amber-100';
       default:
         return 'text-stone-800';
     }
@@ -45,8 +25,13 @@ const StoryBlock = ({
       className="my-6"
     >
       {type === 'dialogue' && speaker && (
-        <div className="text-stone-600 mb-2 tracking-wide">
+        <div className="text-stone-600 mb-2 tracking-wide font-medium">
           {speaker}:
+        </div>
+      )}
+      {type === 'deduction' && (
+        <div className="text-amber-800 mb-2 tracking-wide font-medium">
+          Deduction:
         </div>
       )}
       <div className={`${getTextStyle()} leading-relaxed text-lg`}>
@@ -60,176 +45,200 @@ const StoryBlock = ({
 };
 
 export default function HolmesInitialReaction() {
-  const { 
-    setPhase, 
-    addDialogue, 
-    addDeduction,
-    dialogueHistory,
-    setAvailableActions,
-    setWatsonJoined,
-  } = useGameStore()
-  
-  const [chatItems, setChatItems] = useState<ChatItem[]>([])
-  const [activeItemIndex, setActiveItemIndex] = useState<number>(0)
-  const [isAllComplete, setIsAllComplete] = useState(false)
-  const [showWatsonChoice, setShowWatsonChoice] = useState(false)
-  const storyEndRef = useRef<HTMLDivElement>(null)
-  const { streamingState, startStreaming, stopStreaming } = useStreamingResponse()
-  const typingSpeed = 40 // slightly slower for reading comfort
-
-  useEffect(() => {
-    storyEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [chatItems, activeItemIndex])
+  const { setPhase, addDialogue, addDeduction, dialogueHistory, setWatsonJoined } = useGameStore();
+  const [narration, setNarration] = useState("");
+  const [currentSpeaker, setCurrentSpeaker] = useState("");
+  const [currentDialogue, setCurrentDialogue] = useState("");
+  const [completedDialogues, setCompletedDialogues] = useState([]);
+  const [showWatsonChoice, setShowWatsonChoice] = useState(false);
+  const storyEndRef = useRef(null);
+  const { streamingState, startStreaming, stopStreaming } = useStreamingResponse();
 
   useEffect(() => {
     startStreaming('HOLMES_INITIAL_REACTION', {
       phase: 'HOLMES_INITIAL_REACTION',
       currentLocation: '221B Baker Street',
       recentDialogue: dialogueHistory,
-    })
+    });
 
-    return () => {
-      stopStreaming()
-    }
-  }, [])
+    return () => stopStreaming();
+  }, []);
 
-  // Handle streaming text animation
-  useEffect(() => {
-    if (chatItems.length === 0 || activeItemIndex >= chatItems.length) return
+  const processContent = (content) => {
+    if (!content) return null;
 
-    const currentItem = chatItems[activeItemIndex]
-    if (currentItem.isComplete) {
-      if (activeItemIndex < chatItems.length - 1) {
-        setActiveItemIndex(prev => prev + 1)
-      }
-      return
-    }
-
-    const fullText = currentItem.text
-    const currentText = currentItem.currentText || ''
-
-    if (currentText.length < fullText.length) {
-      const timeoutId = setTimeout(() => {
-        setChatItems(prev => prev.map((item, index) => 
-          index === activeItemIndex
-            ? { 
-                ...item, 
-                currentText: fullText.slice(0, currentText.length + 1)
-              }
-            : item
-        ))
-      }, typingSpeed)
-
-      return () => clearTimeout(timeoutId)
-    } else {
-      setChatItems(prev => prev.map((item, index) => 
-        index === activeItemIndex ? { ...item, isComplete: true } : item
-      ))
-    }
-  }, [chatItems, activeItemIndex])
-
-  // Handle narrative updates
-  useEffect(() => {
-    if (streamingState.narrative && !chatItems.some(item => item.type === 'narrative')) {
-      setChatItems(prev => [...prev, {
-        id: 'narrative',
-        type: 'narrative',
-        text: streamingState.narrative,
-        currentText: '',
-        isComplete: false
-      }])
-    }
-  }, [streamingState.narrative])
-
-  // Handle dialogue and deduction updates
-  useEffect(() => {
-    if (streamingState.fullResponse) {
-      streamingState.fullResponse.dialogueEntries?.forEach(entry => {
-        if (!chatItems.some(item => item.id === `dialogue-${entry.text}`)) {
-          setChatItems(prev => [...prev, {
-            id: `dialogue-${entry.text}`,
-            type: 'dialogue',
-            text: entry.text,
-            currentText: '',
-            speaker: entry.speaker,
-            isComplete: false
-          }])
-          addDialogue({
-            text: entry.text,
-            speaker: entry.speaker || '',
-            timestamp: new Date().toISOString()
-          })
-        }
-      })
-
-      streamingState.fullResponse.deductions?.forEach(deduction => {
-        const deductionText = `${deduction.conclusion}\n\nBased on: ${deduction.observation}`
-        if (!chatItems.some(item => item.id === `deduction-${deduction.conclusion}`)) {
-          setChatItems(prev => [...prev, {
-            id: `deduction-${deduction.conclusion}`,
-            type: 'deduction',
-            text: deductionText,
-            currentText: '',
-            isComplete: false,
-            conclusion: deduction.conclusion,
-            observation: deduction.observation
-          }])
-          addDeduction({
-            conclusion: deduction.conclusion,
-            observation: deduction.observation,
-            timestamp: new Date().toISOString()
-          })
-        }
-      })
-
-      if (streamingState.fullResponse.availableActions) {
-        setAvailableActions(streamingState.fullResponse.availableActions)
-      }
-    }
-  }, [streamingState.fullResponse])
-
-  // Check if all items are complete
-  useEffect(() => {
-    if (chatItems.length > 0 && chatItems.every(item => item.isComplete)) {
-      setIsAllComplete(true)
-      // Add small delay before showing Watson's choice
-      const timer = setTimeout(() => {
-        setShowWatsonChoice(true)
-      }, 1000)
-      return () => clearTimeout(timer)
-    }
-  }, [chatItems])
-
-  const handleWatsonChoice = (willJoin: boolean) => {
-    setWatsonJoined(willJoin)
+    // Check for duplicate markers - if found, stop streaming
+    const narrativeCount = (content.match(/###NARRATIVE###/g) || []).length;
+    const dialogueCount = (content.match(/###DIALOGUE###/g) || []).length;
     
-    // Add Watson's response to dialogue
+    if (narrativeCount > 1 || dialogueCount > 1) {
+      console.log('Duplicate markers detected, stopping stream');
+      stopStreaming();
+      
+      // Add all dialogues to history
+      completedDialogues.forEach(item => {
+        addDialogue({
+          character: item.role,
+          dialogue: item.line
+        });
+      });
+
+      setShowWatsonChoice(true);
+      return;
+    }
+    
+    // Extract narrative - only process first occurrence
+    const narrativeMarker = '###NARRATIVE###';
+    if (content.includes(narrativeMarker)) {
+      const start = content.indexOf(narrativeMarker) + narrativeMarker.length;
+      const nextMarker = content.indexOf('###', start);
+      const narrative = nextMarker === -1 ? content.slice(start) : content.slice(start, nextMarker);
+      setNarration(narrative.trim());
+    }
+
+    // Process dialogue in real-time - only process first dialogue section
+    const dialogueMarker = '###DIALOGUE###';
+    if (content.includes(dialogueMarker)) {
+      const dialogueStart = content.indexOf(dialogueMarker) + dialogueMarker.length;
+      const nextSection = content.indexOf('###', dialogueStart);
+      const dialogueContent = nextSection === -1 ? content.slice(dialogueStart) : content.slice(dialogueStart, nextSection);
+
+      // Look for speaker marker
+      if (dialogueContent.includes('##SPEAKER##')) {
+        const speakerStart = dialogueContent.lastIndexOf('##SPEAKER##') + '##SPEAKER##'.length;
+        const speakerEnd = dialogueContent.indexOf('##TEXT##', speakerStart);
+        
+        if (speakerEnd !== -1) {
+          const speaker = dialogueContent.slice(speakerStart, speakerEnd).trim();
+          if (speaker !== currentSpeaker) {
+            // New speaker - complete previous dialogue if exists
+            if (currentSpeaker && currentDialogue) {
+              const cleanDialogue = currentDialogue
+                .replace(/##SPE.*$/, '') // Remove partial ##SPEAKER## markers
+                .replace(/###DED.*$/, '') // Remove partial ###DEDUCTIONS### markers
+                .replace(/###DIALOGUE###.*$/, '') // Remove partial ###DIALOGUE### markers
+                .replace(/^\"|\"$/g, '') // Remove outer quotes
+                .replace(/^\"|\"|\"$/g, '') // Remove any remaining quotes
+                .replace(/^\[|\]$/g, '') // Remove leading and trailing square brackets
+                .replace(/##S.*$/, '') // Remove ##SPEAKER## markers
+                .trim();
+
+              if (cleanDialogue) {
+                console.log('Completing dialogue:', { role: currentSpeaker, line: cleanDialogue });
+                setCompletedDialogues(prev => [...prev, { role: currentSpeaker, line: cleanDialogue }]);
+              }
+              setCurrentDialogue("");
+            }
+            setCurrentSpeaker(speaker);
+          }
+          
+          // Get the text after ##TEXT##
+          const textStart = speakerEnd + '##TEXT##'.length;
+          let text;
+          
+          // Look for the next speaker or deductions marker
+          const nextSpeaker = dialogueContent.indexOf('##SPEAKER##', textStart);
+          const deductionsMarker = dialogueContent.indexOf('###DEDUCTIONS###', textStart);
+          
+          if (nextSpeaker !== -1 && (deductionsMarker === -1 || nextSpeaker < deductionsMarker)) {
+            text = dialogueContent.slice(textStart, nextSpeaker);
+          } else if (deductionsMarker !== -1) {
+            text = dialogueContent.slice(textStart, deductionsMarker);
+          } else {
+            text = dialogueContent.slice(textStart);
+          }
+          
+          // Clean up the text
+          const cleanText = text
+            .replace(/^\"|\"$/g, '') // Remove outer quotes
+            .replace(/^\"|\"|\"$/g, '') // Remove any remaining quotes
+            .trim();
+            
+          if (cleanText) {
+            setCurrentDialogue(cleanText);
+          }
+        }
+      }
+    }
+
+    // Extract deductions - only process when streaming is complete
+    if (streamingState.isComplete && content.includes('###DEDUCTIONS###')) {
+      const deductionsMarker = '###DEDUCTIONS###';
+      const deductionsStart = content.indexOf(deductionsMarker) + deductionsMarker.length;
+      const nextSection = content.indexOf('###', deductionsStart);
+      try {
+        const deductionsContent = nextSection === -1 
+          ? content.slice(deductionsStart).trim() 
+          : content.slice(deductionsStart, nextSection).trim();
+        if (deductionsContent.startsWith('[') && deductionsContent.endsWith(']')) {
+          const deductions = JSON.parse(deductionsContent);
+          deductions.forEach(item => {
+            addDeduction(item.interpretation || item.deduction);
+          });
+        }
+      } catch (error) {
+        console.error('Error parsing deductions:', error);
+      }
+
+      // Complete the final dialogue
+      if (currentSpeaker && currentDialogue && !completedDialogues.some(d => d.role === currentSpeaker && d.line === currentDialogue.trim())) {
+        const cleanDialogue = currentDialogue
+          .replace(/##SPE.*$/, '')
+          .replace(/###DED.*$/, '')
+          .replace(/^\"|\"$/g, '') // Remove outer quotes
+          .replace(/^\"|\"|\"$/g, '') // Remove any remaining quotes
+          .trim();
+
+        if (cleanDialogue) {
+          console.log('Completing final dialogue:', { role: currentSpeaker, line: cleanDialogue });
+          setCompletedDialogues(prev => [...prev, { role: currentSpeaker, line: cleanDialogue }]);
+          setCurrentDialogue("");
+          setCurrentSpeaker("");
+        }
+      }
+
+      // Add all dialogues to history
+      completedDialogues.forEach(item => {
+        addDialogue({
+          character: item.role,
+          dialogue: item.line
+        });
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (!streamingState.content) return;
+    processContent(streamingState.content);
+  }, [streamingState.content, streamingState.isComplete]);
+
+  useEffect(() => {
+    storyEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [narration, currentDialogue, completedDialogues]);
+
+  const handleWatsonChoice = (willJoin) => {
+    setWatsonJoined(willJoin);
+    
     const response = willJoin 
       ? "I would be honored to assist you in this investigation, Holmes. Your deductions are, as always, fascinating."
       : "I must decline this time, Holmes. Though your deductions intrigue me, my medical practice requires my attention.";
     
     addDialogue({
-      text: response,
-      speaker: "Dr. Watson",
-      timestamp: new Date().toISOString()
-    })
+      character: "Dr. Watson",
+      dialogue: response
+    });
 
-    // Add Holmes's acknowledgment
     setTimeout(() => {
       addDialogue({
-        text: willJoin 
+        character: "Sherlock Holmes",
+        dialogue: willJoin 
           ? "Excellent, Watson! Your medical expertise may prove invaluable in this case."
-          : "I understand, my dear Watson. I shall keep you informed of any remarkable developments.",
-        speaker: "Sherlock Holmes",
-        timestamp: new Date().toISOString()
-      })
+          : "I understand, my dear Watson. I shall keep you informed of any remarkable developments."
+      });
 
-      // Move to story development phase
-      setTimeout(() => {
-        setPhase('STORY_DEVELOPMENT')
-      }, 2000)
-    }, 2000)
-  }
+      setTimeout(() => setPhase('STORY_DEVELOPMENT'), 2000);
+    }, 2000);
+  };
 
   return (
     <motion.div
@@ -244,22 +253,39 @@ export default function HolmesInitialReaction() {
           </div>
           
           <div className="space-y-2">
-            {chatItems.map((item, index) => (
+            {narration && (
               <StoryBlock
-                key={item.id}
-                type={item.type}
-                text={index <= activeItemIndex ? item.currentText || '' : ''}
-                speaker={item.speaker}
-                isTyping={index === activeItemIndex && !item.isComplete}
+                type="narrative"
+                text={narration}
+                speaker={null}
+                isTyping={!streamingState.isComplete}
+              />
+            )}
+            
+            {completedDialogues.map((dialogue, index) => (
+              <StoryBlock
+                key={index}
+                type="dialogue"
+                text={dialogue.line}
+                speaker={dialogue.role}
+                isTyping={false}
               />
             ))}
+            
+            {currentSpeaker && currentDialogue && (
+              <StoryBlock
+                type="dialogue"
+                text={currentDialogue}
+                speaker={currentSpeaker}
+                isTyping={!streamingState.isComplete}
+              />
+            )}
+            
             <div ref={storyEndRef} />
           </div>
 
           {streamingState.error && (
-            <div className="text-red-600 mt-8">
-              {streamingState.error}
-            </div>
+            <div className="text-red-600 mt-8">{streamingState.error}</div>
           )}
 
           {showWatsonChoice && (
@@ -292,5 +318,5 @@ export default function HolmesInitialReaction() {
         </div>
       </div>
     </motion.div>
-  )
+  );
 }

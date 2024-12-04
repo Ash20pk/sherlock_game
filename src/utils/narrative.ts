@@ -21,6 +21,9 @@ export interface NarrativeResponse {
     unlockedEvidence?: Evidence[]
     unlockedDeductions?: DeductionEntry[]
   }
+  chapterTitle?: string
+  rawNarrative?: string
+  displayNarrative?: string
 }
 
 export interface NarrativeContext {
@@ -94,4 +97,68 @@ export function createDeductionEntry(
     confidence,
     timestamp: new Date().toISOString()
   }
+}
+
+export function parseStreamingContent(content: string) {
+  const result: Partial<NarrativeResponse> = {};
+  let narrative = content;
+
+  // Extract chapter title
+  const chapterMatch = content.match(/###CHAPTER###([^#]+)/);
+  if (chapterMatch) {
+    result.chapterTitle = chapterMatch[1].trim();
+    narrative = narrative.replace(/###CHAPTER###[^#]+/, '');
+  }
+
+  // Extract narrative
+  const narrativeMatch = content.match(/###NARRATIVE###([^#]+)/);
+  if (narrativeMatch) {
+    result.narrative = narrativeMatch[1].trim();
+    narrative = narrative.replace(/###NARRATIVE###[^#]+/, '');
+  }
+
+  // Extract dialogue
+  const dialogueMatch = content.match(/###DIALOGUE###(\[.*?\])/s);
+  if (dialogueMatch) {
+    try {
+      result.dialogueEntries = JSON.parse(dialogueMatch[1]);
+      narrative = narrative.replace(/###DIALOGUE###\[.*?\]/s, '');
+    } catch (e) {}
+  }
+
+  // Extract deductions
+  const deductionsMatch = content.match(/###DEDUCTIONS###(\[.*?\])/s);
+  if (deductionsMatch) {
+    try {
+      result.deductions = JSON.parse(deductionsMatch[1]);
+      narrative = narrative.replace(/###DEDUCTIONS###\[.*?\]/s, '');
+    } catch (e) {}
+  }
+
+  // Extract evidence
+  const evidenceMatch = content.match(/###EVIDENCE###(\[.*?\])/s);
+  if (evidenceMatch) {
+    try {
+      result.evidence = JSON.parse(evidenceMatch[1]);
+      narrative = narrative.replace(/###EVIDENCE###\[.*?\]/s, '');
+    } catch (e) {}
+  }
+
+  // Extract actions
+  const actionsMatch = content.match(/###ACTIONS###(\[.*?\])/s);
+  if (actionsMatch) {
+    try {
+      result.availableActions = JSON.parse(actionsMatch[1]);
+      narrative = narrative.replace(/###ACTIONS###\[.*?\]/s, '');
+    } catch (e) {}
+  }
+
+  // Clean up any remaining markers
+  narrative = narrative.replace(/###[A-Z]+###/g, '');
+
+  return {
+    ...result,
+    rawNarrative: content,
+    displayNarrative: narrative.trim()
+  };
 }

@@ -1,42 +1,40 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { NarrativeResponse } from '@/utils/narrative';
 
 interface StreamingState {
-  narrative: string;
+  content: string;
   isComplete: boolean;
-  fullResponse?: NarrativeResponse;
-  partialResponse?: Partial<NarrativeResponse>;
   error?: string;
 }
 
 export function useStreamingResponse() {
   const [streamingState, setStreamingState] = useState<StreamingState>({
-    narrative: '',
+    content: '',
     isComplete: false
   });
   
-  // Use refs to track active streaming state
   const activeStreamRef = useRef<boolean>(false);
   const abortControllerRef = useRef<AbortController | null>(null);
-  const bufferRef = useRef<string>('');
 
   const startStreaming = useCallback(async (phase: string, context?: any) => {
-    try {
-      // Cancel any existing stream
-      if (abortControllerRef.current) {
+    // Clean up any existing stream
+    if (abortControllerRef.current) {
+      try {
         abortControllerRef.current.abort();
+      } catch (e) {
+        console.warn('Error aborting previous stream:', e);
       }
+    }
 
-      // Reset state and set up new stream
+    try {
       activeStreamRef.current = true;
       abortControllerRef.current = new AbortController();
-      bufferRef.current = '';
-
+      
       setStreamingState({
-        narrative: '',
+        content: '',
         isComplete: false
       });
-
+  
       const response = await fetch('/api/narrative', {
         method: 'POST',
         headers: {
@@ -45,32 +43,40 @@ export function useStreamingResponse() {
         body: JSON.stringify({ phase, context }),
         signal: abortControllerRef.current.signal
       });
-
-
-      console.log(response)
+  
       if (!response.ok) {
         throw new Error('Failed to start streaming');
       }
-
+  
       const reader = response.body?.getReader();
       if (!reader) {
         throw new Error('No reader available');
       }
-
+  
       const decoder = new TextDecoder();
-
+      let buffer = '';
+      let currentMarker: string | null = null;
+  
       while (activeStreamRef.current) {
-        const { done, value } = await reader.read();
+        let result;
+        try {
+          result = await reader.read();
+        } catch (error) {
+          if (error instanceof DOMException && error.name === 'AbortError') {
+            console.log('Stream aborted');
+            return;
+          }
+          throw error;
+        }
+  
+        const { done, value } = result;
         
         if (done) {
           try {
-            const fullResponse = JSON.parse(bufferRef.current);
             if (activeStreamRef.current) {
               setStreamingState(prev => ({
                 ...prev,
-                narrative: fullResponse.narrative || prev.narrative,
                 isComplete: true,
-                fullResponse
               }));
             }
           } catch (e) {
@@ -78,59 +84,60 @@ export function useStreamingResponse() {
           }
           break;
         }
-
-        // Decode the chunk and add to buffer
+  
         const chunk = decoder.decode(value, { stream: true });
-        bufferRef.current += chunk;
-
-        try {
-          // Try to parse as complete JSON first
-          const fullResponse = JSON.parse(bufferRef.current);
-          if (activeStreamRef.current) {
-            setStreamingState(prev => ({
-              ...prev,
-              narrative: fullResponse.narrative,
-              fullResponse
-            }));
-          }
-        } catch (e) {
-          // If not valid JSON yet, try to extract the narrative text
-          const narrativeMatch = bufferRef.current.match(/"narrative"\s*:\s*"([^"]*)"/);
-          if (narrativeMatch && activeStreamRef.current) {
-            setStreamingState(prev => ({
-              ...prev,
-              narrative: narrativeMatch[1]
-            }));
-          }
-        }
-      }
-    } catch (error) {
-      if (error.name === 'AbortError') {
-        return; // Ignore abort errors
-      }
-      console.error('Streaming error:', error);
-      if (activeStreamRef.current) {
         setStreamingState(prev => ({
           ...prev,
-          error: error instanceof Error ? error.message : 'Unknown error occurred',
-          isComplete: true
+          content: prev.content + chunk
         }));
       }
+    
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        console.log('Stream aborted');
+        return;
+      }
+      console.error('Streaming error:', error);
+      setStreamingState(prev => ({
+        ...prev,
+        error: error instanceof Error ? error.message : 'Unknown error occurred',
+        isComplete: true
+      }));
     }
-  }, []); // No dependencies needed as we use refs
+  }, []);
 
   const stopStreaming = useCallback(() => {
+    if (!activeStreamRef.current) return;
+    
     activeStreamRef.current = false;
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
+    try {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+    } catch (e) {
+      console.warn('Error during stream cleanup:', e);
     }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      try {
+        if (abortControllerRef.current) {
+          abortControllerRef.current.abort();
+          abortControllerRef.current = null;
+        }
+        activeStreamRef.current = false;
+      } catch (e) {
+        console.warn('Error during cleanup:', e);
+      }
+    };
   }, []);
 
   const reset = useCallback(() => {
     stopStreaming();
     setStreamingState({
-      narrative: '',
+      content: '',
       isComplete: false
     });
   }, [stopStreaming]);

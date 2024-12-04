@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 import { useGameStore } from '@/store/gameState';
 import { useStreamingResponse } from '@/hooks/useStreamingResponse';
 import { useEffect, useState } from 'react';
-import { TelegramEffect } from '@/components/ui/TelegramEffect';
+import TelegramEffect from '@/components/ui/TelegramEffect';
 
 export default function NarratorIntroduction() {
   const { setPhase, addDialogue } = useGameStore();
@@ -19,14 +19,12 @@ export default function NarratorIntroduction() {
     };
   }, []);
 
+  console.log('Streaming state:', streamingState);
   useEffect(() => {
-    if (streamingState.isComplete && streamingState.fullResponse) {
-      streamingState.fullResponse.dialogueEntries?.forEach(entry => {
-        addDialogue(entry);
-      });
-      setTimeout(() => setShowContinue(true), 1000);
+    if (streamingState.isComplete) {
+      setShowContinue(true);
     }
-  }, [streamingState.isComplete, streamingState.fullResponse, addDialogue]);
+  }, [streamingState.isComplete]);
 
   const handleContinue = () => {
     setPhase('HOLMES_INITIAL_REACTION');
@@ -61,7 +59,7 @@ export default function NarratorIntroduction() {
 
         <div className="mb-8">
           <TelegramEffect 
-            text={streamingState.narrative || ''} 
+            text={streamingState.content || ''} 
             isComplete={streamingState.isComplete}
           />
         </div>

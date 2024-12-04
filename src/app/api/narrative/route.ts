@@ -13,7 +13,7 @@ const NARRATIVE_PROMPTS = {
   - Time of day and weather
   - Brief mention of recent events leading to the case
   - Introduction of the initial mystery or crime
-  Write in a classic noir narrative style.`,
+  - Write in a classic noir narrative style.`,
 
   HOLMES_INITIAL_REACTION: `Write Holmes's initial reaction to the case in his characteristic style. Include:
   - His first deductions from the initial information
@@ -21,7 +21,7 @@ const NARRATIVE_PROMPTS = {
   - His immediate thoughts on the case's peculiarities
   - Any preliminary hypotheses
   - Watson's medical or practical insights
-  Maintain Holmes's precise, analytical manner of speaking.`,
+  - Maintain Holmes's precise, analytical manner of speaking.`,
 
   STORY_DEVELOPMENT: `Develop the story with new revelations and developments, incorporating interactive challenges for Watson, the story moves forward with every chapter. Make sure to return only 1 type of interactive element at a time. Include:
 
@@ -127,67 +127,34 @@ Available Evidence: ${JSON.stringify(context?.evidence || [])}
 Recent Dialogue: ${JSON.stringify(context?.recentDialogue || [])}
 Recent Deductions: ${JSON.stringify(context?.recentDeductions || [])}
 
-For the STORY_DEVELOPMENT phase, please ensure there must be only 1 type of interactive challenge at a time:
+For the STORY_DEVELOPMENT phase, please ensure there must be only 1 type of interactive challenge at a time.
 
 For the NARRATOR_INTRODUCTION phase, please render the narrative only. Rest should be empty. 
 
-For the HOLMES_INITIAL_REACTION phase, please render the narrative, dialogueEntries and deductions only. Rest should be empty.
+For the HOLMES_INITIAL_REACTION phase, please render the narrative, dialogueEntries only. Rest should be empty.
 
-Please provide your response in valid JSON format with the following structure:
-{
-  "chapterTitle": "Name of the chapter, don't include chapter number", (Only for STORY_DEVELOPMENT phase)
-  "narrative": "The main narrative text",
-  "dialogueEntries": [
-    {"speaker": "HOLMES/WATSON/NARRATOR/LESTRADE/WITNESS/{Other characters}", "text": "Their words"}
-  ],
-  "deductions": [
-    {
-      "observation": "What was observed",
-      "conclusion": "What it means",
-      "confidence": 0-100,
-      "author": "HOLMES/WATSON"
-    }
-  ],
-  "evidence": [
-    {
-      "id": "unique_id",
-      "title": "Short name",
-      "type": "Type of evidence",
-      "content": "content of the evidence",
-      "analysis": "Optional analysis of the evidence"
-    }
-  ],
-  "availableActions": [
-    {
-    "id": "unique_id",
-    "text": "Description of the challenge",
-    "type": "ACTION/RIDDLE/PUZZLE/MEDICAL/OBSERVATION/LOGIC/PHYSICAL" (Strictly only 1 type per chapter),
-    "challenge": { (If type is not ACTION, include this object)
-      "question": "The actual riddle or puzzle text, include the evidence contents as required",
-      "hints": ["Subtle hint 1", "Subtle hint 2"],
-      "solution": "Direct solution in a word or phrase to the challenge",
-      "difficulty": "EASY/MEDIUM/HARD"
-    },
-    "action": { (If type is ACTION, include this object)
-      "text": "Description of the action",
-      "actionOptions": ["Option 1", "Option 2"],
-    },
-    "requiresEvidence": ["evidence_ids"],
-    "availableFor": "WATSON",
-    "reward": {
-      "type": "EVIDENCE/DEDUCTION/LOCATION",
-      "description": "What solving this challenge reveals"
-    }
-  ]
-}
+Please provide your response using the following markers for each section, do not repeat the markers. Start each section with its marker:
 
-Ensure your response is ONLY the JSON object, with no additional text before or after.`;
+###CHAPTER### [chapter title text] (Only for STORY_DEVELOPMENT phase)
+
+###NARRATIVE### [main narrative text] (continuous 1 long line)
+
+###DIALOGUE### [array of dialogue entries in this format: ##SPEAKER## [speaker name] ##TEXT## [dialogue text]]
+
+###DEDUCTIONS### [array of deductions in JSON format]
+
+###EVIDENCE### [array of evidence items in JSON format]
+
+###ACTIONS### [array of available actions in JSON format]
+
+Each section should be in the specified format and order for each phase with its marker. Only include sections that have content.
+Do not include any additional text or formatting.`;
 
     const response = await openai.chat.completions.create({
       messages: [
         {
           role: "system",
-          content: "You are a Victorian-era narrator crafting a Sherlock Holmes mystery, each phase moves the story forward and each challenge should be related to the story and should be unique. You must respond with a valid JSON object containing the narrative elements."
+          content: "You are a Victorian-era narrator crafting a Sherlock Holmes mystery, each phase moves the story forward and each challenge should be related to the story and should be unique. You must respond using the specified markers for each section."
         },
         {
           role: "user",
@@ -201,9 +168,10 @@ Ensure your response is ONLY the JSON object, with no additional text before or 
     });
 
     // Create a streaming response using Web Streams API
-    const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
+        const encoder = new TextEncoder();
+
         const onParse = (event: any) => {
           if (event.choices[0]?.delta?.content) {
             const text = event.choices[0].delta.content;

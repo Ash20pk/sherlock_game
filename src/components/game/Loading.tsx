@@ -1,18 +1,8 @@
 import { motion } from 'framer-motion'
-import { useEffect, useCallback } from 'react'
-import { useGameStore } from '@/store/gameState'
+import { useEffect, useState } from 'react'
 
-interface LoadingProps {
-  nextPhase?: string;
-}
-
-export const Loading = ({ nextPhase = 'TITLE_SCREEN' }: LoadingProps) => {
-  const { progress, setProgress, setPhase } = useGameStore()
-
-  const completeLoading = useCallback(() => {
-    console.log(`Transitioning to ${nextPhase}`)
-    setPhase(nextPhase)
-  }, [setPhase, nextPhase])
+export const Loading = () => {
+  const [progress, setProgress] = useState(0)
 
   useEffect(() => {
     console.log('Loading component mounted')
@@ -21,14 +11,11 @@ export const Loading = ({ nextPhase = 'TITLE_SCREEN' }: LoadingProps) => {
     const interval = setInterval(() => {
       if (!mounted) return
       
-      const newProgress = Math.min(progress + 2, 100)
-      console.log('Loading progress:', newProgress)
-      setProgress(newProgress)
-      
-      if (newProgress === 100) {
-        clearInterval(interval)
-        completeLoading()
-      }
+      setProgress(prev => {
+        const newProgress = Math.min(prev + 2, 100)
+        console.log('Loading progress:', newProgress)
+        return newProgress
+      })
     }, 50)
 
     return () => {
@@ -36,7 +23,7 @@ export const Loading = ({ nextPhase = 'TITLE_SCREEN' }: LoadingProps) => {
       clearInterval(interval)
       console.log('Loading component cleanup')
     }
-  }, [setProgress, completeLoading, progress])
+  }, [])
 
   return (
     <motion.div 
