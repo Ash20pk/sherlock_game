@@ -55,7 +55,6 @@ export function useStreamingResponse() {
   
       const decoder = new TextDecoder();
       let buffer = '';
-      let currentMarker: string | null = null;
   
       while (activeStreamRef.current) {
         let result;
@@ -85,11 +84,18 @@ export function useStreamingResponse() {
           break;
         }
   
-        const chunk = decoder.decode(value, { stream: true });
+        const char = decoder.decode(value, { stream: true });
+        // Apply the character immediately for smoother streaming
         setStreamingState(prev => ({
           ...prev,
-          content: prev.content + chunk
+          content: prev.content + char
         }));
+
+        // Small delay for visual effect after section markers
+        if (buffer.endsWith('###') && char === '\n') {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        buffer = (buffer + char).slice(-3);
       }
     
     } catch (error) {

@@ -8,23 +8,45 @@ import { Loading } from './Loading'
 
 interface ChatItem {
   id: string;
-  type: 'narrative' | 'dialogue' | 'deduction' | 'evidence' | 'chapter-title';
+  type: 'narrative' | 'dialogue' | 'deduction' | 'evidence' | 'chapter-title' | 'action';
   text: string;
   currentText: string;
   speaker?: string;
   isComplete: boolean;
   evidence?: Evidence;
+  deduction?: DeductionEntry;
+  action?: Action;
+  onSolve?: (actionId: string) => void;
+  onChapterProgress?: () => void;
   chapterNumber?: number;
 }
 
 const EvidenceDisplay: React.FC<{ evidence: Evidence }> = ({ evidence }) => {
+  console.log('Rendering evidence:', evidence);
+  
+  // Get the content from various possible fields
+  const content = evidence.content || evidence.details?.text || evidence.description || '';
+  console.log('Evidence content:', content);
+
   return (
-    <div className="p-3 border-2 rounded-lg">
-      <div className="font-medium text-stone-900">{evidence.title}</div>
-      <div className="text-stone-700 mt-1">
-        {typeof evidence.content === 'object' && evidence.content.text ? evidence.content.text : evidence.content}
+    <div className="rounded-lg">
+      <div className="text-sm text-amber-600 mb-2">Evidence</div>
+      <div className="text-stone-700 mt-1 italic">
+        {typeof content === 'object' && 'text' in content ? content.text : content}
       </div>
-      <div className="text-sm text-stone-500 mt-2">Type: {evidence.type}</div>
+    </div>
+  );
+};
+
+const DeductionDisplay: React.FC<{ deduction: DeductionEntry }> = ({ deduction }) => {
+
+  console.log('Rendering deduction:', deduction);
+  return (
+    <div>
+      <div className="text-sm text-amber-600 mb-2">Deductions</div>
+      <div className="text-stone-700 italic">
+        "{deduction.description}"
+      </div>
     </div>
   );
 };
@@ -32,15 +54,25 @@ const EvidenceDisplay: React.FC<{ evidence: Evidence }> = ({ evidence }) => {
 const StoryBlock = ({ 
   type,
   text,
+  currentText,
   speaker,
   isTyping,
-  evidence
+  evidence,
+  deduction,
+  action,
+  onSolve,
+  onChapterProgress
 }: {
   type: string;
   text: string;
+  currentText: string;
   speaker?: string;
   isTyping: boolean;
   evidence?: Evidence;
+  deduction?: DeductionEntry;
+  action?: Action;
+  onSolve?: (actionId: string) => void;
+  onChapterProgress?: () => void;
 }) => {
   const getTextStyle = () => {
     switch (type) {
@@ -53,6 +85,8 @@ const StoryBlock = ({
         return 'text-amber-800';
       case 'deduction':
         return 'text-stone-800 italic';
+      case 'action':
+        return 'text-stone-800';
       default:
         return 'text-stone-800';
     }
@@ -66,10 +100,73 @@ const StoryBlock = ({
         return 'mb-6';
       case 'deduction':
         return 'mt-6 mb-6 pl-4 border-l-4 border-stone-300';
+      case 'evidence':
+        return 'mb-6 bg-amber-50 border-2 border-amber-200 rounded-lg p-4';
       case 'dialogue':
+        return 'mb-6';
+      case 'action':
         return 'mb-6';
       default:
         return 'mb-3';
+    }
+  };
+
+  console.log('Rendering StoryBlock:', { type, text, speaker, isTyping, evidence, deduction, action });
+
+  const renderContent = () => {
+    switch (type) {
+      case 'dialogue':
+        return (
+          <>
+            {speaker && (
+              <div className="text-stone-600 mb-1 tracking-wide font-medium">
+                {speaker}:
+              </div>
+            )}
+            <div className={`${getTextStyle()} leading-relaxed text-lg`}>
+              <span className="font-serif">"</span>
+              {text}
+              {!isTyping && (
+                <span className="inline-block w-1 h-4 ml-1 bg-stone-400 animate-pulse" />
+              )}
+              {isTyping && <span className="font-serif">"</span>}
+            </div>
+          </>
+        );
+
+      case 'evidence':
+        if (evidence) {
+          return <EvidenceDisplay evidence={evidence} />;
+        }
+        break;
+
+      case 'deduction':
+        if (deduction) {
+          return <DeductionDisplay deduction={deduction} />;
+        }
+        break;
+
+      case 'action':
+        if (action && onSolve && onChapterProgress) {
+          return (
+            <ChallengeCard 
+              action={action}
+              onSolve={onSolve}
+              onChapterProgress={onChapterProgress}
+            />
+          );
+        }
+        break;
+
+      default:
+        return (
+          <div className={`${getTextStyle()} leading-relaxed text-lg`}>
+            {currentText}
+            {isTyping && (
+              <span className="inline-block w-1 h-4 ml-1 bg-stone-400 animate-pulse" />
+            )}
+          </div>
+        );
     }
   };
 
@@ -79,17 +176,7 @@ const StoryBlock = ({
       animate={{ opacity: 1 }}
       className={getBlockStyle()}
     >
-      {type === 'dialogue' && speaker && (
-        <div className="text-stone-600 mb-1 tracking-wide font-medium">
-          {speaker}:
-        </div>
-      )}
-      <div className={`${getTextStyle()} leading-relaxed text-lg`}>
-        {type === 'dialogue' ? `"${text}"` : text}
-        {isTyping && (
-          <span className="inline-block w-1 h-4 ml-1 bg-stone-400 animate-pulse" />
-        )}
-      </div>
+      {renderContent()}
     </motion.div>
   );
 };
@@ -124,6 +211,7 @@ const EvidenceItem: React.FC<{ evidence: Evidence }> = ({ evidence }) => {
       caseNumber: string;
       date: string;
       location: string;
+      type?: string;
     };
     description?: string;
     content?: string;
@@ -221,9 +309,12 @@ const EvidenceItem: React.FC<{ evidence: Evidence }> = ({ evidence }) => {
               <div>
                 <div ref={contentRef}>
                   <EvidenceReport
-                    metadata={evidenceDetails.metadata}
+                    metadata={{
+                      ...evidenceDetails.metadata!,
+                      type: evidence.type
+                    }}
                     description={evidenceDetails.description || ''}
-                    content={evidenceDetails.content}
+                    content={evidenceDetails.content || ''}
                   />
                 </div>
                 
@@ -309,6 +400,8 @@ const ChallengeCard: React.FC<{
     }
   };
 
+  console.log('Action:', action);
+
   // Handle ACTION type differently
   if (action.type === 'ACTION') {
     return (
@@ -317,6 +410,7 @@ const ChallengeCard: React.FC<{
         animate={{ opacity: 1, y: 0 }}
         className="p-6 bg-white rounded-lg shadow-sm border-2 border-stone-100"
       >
+        <div className="text-stone-600 font-medium mb-2">Available Actions:</div>
         {evidence && evidence.length > 0 && (
           <div className="mb-6">
             <div className="text-stone-600 font-medium mb-2">Available Evidence:</div>
@@ -504,7 +598,7 @@ export default function StoryDevelopment() {
     addEvidence,
     setAvailableActions,
     dialogueHistory,
-    evidence,
+    evidence: existingEvidence,
   } = useGameStore()
   
   const [chatItems, setChatItems] = useState<ChatItem[]>([])
@@ -513,6 +607,10 @@ export default function StoryDevelopment() {
   const [availableActions, setLocalAvailableActions] = useState<Action[]>([])
   const [currentChapter, setCurrentChapter] = useState<number>(1)
   const [isLoading, setIsLoading] = useState(false)
+  const [isLoadingActions, setIsLoadingActions] = useState(false)
+  const [processedEvidenceIds, setProcessedEvidenceIds] = useState(new Set<string>())
+  const [processedDeductionIds, setProcessedDeductionIds] = useState(new Set<string>())
+  const [processedSections, setProcessedSections] = useState(new Set<string>())
   const storyEndRef = useRef<HTMLDivElement>(null)
   const { streamingState, startStreaming, stopStreaming } = useStreamingResponse()
   const typingSpeed = 40
@@ -523,23 +621,78 @@ export default function StoryDevelopment() {
 
   const handleActionSolved = async (actionId: string) => {
     const action = availableActions.find(a => a.id === actionId);
+    console.log('handleActionSolved', actionId, action)
     if (!action) return;
 
-    // Add any evidence from the action
-    if (action.reward?.evidence) {
-      addEvidence(action.reward.evidence);
-    }
+    // If the action has a reward of type EVIDENCE, generate evidence content
+    if (action.reward?.type === 'EVIDENCE') {
+      try {
+        // Get the solution from the action marker
+        const actionSolution = typeof action.solution === 'string' ? action.solution : 
+                             Array.isArray(action.solution) ? action.solution.join('\n') : 
+                             action.challenge?.solution || '';
 
-    // Add any dialogue from the action
-    if (action.reward?.dialogue) {
-      addDialogue(action.reward.dialogue);
+        console.log('Generating evidence with params:', {
+          type: action.type,
+          title: action.reward.description,
+          content: actionSolution,
+          solution: actionSolution
+        });
+
+        const params = new URLSearchParams({
+          type: action.type || 'PUZZLE',
+          title: action.reward.description || action.text,
+          content: actionSolution,
+          solution: actionSolution
+        });
+
+        const evidenceResponse = await fetch(`/api/evidence/${actionId}?${params}`);
+
+        if (evidenceResponse.ok) {
+          const evidenceData = await evidenceResponse.json();
+          console.log('Evidence response:', evidenceData);
+          
+          // Create the evidence object with the generated content
+          const evidence = {
+            id: `${actionId}_evidence`,
+            title: action.reward.description || action.text,
+            type: action.type || 'PUZZLE',
+            content: evidenceData.content,
+            description: evidenceData.description,
+            metadata: evidenceData.metadata,
+            contentType: evidenceData['content-type'],
+            discoveredAt: new Date().toISOString(),
+            usedIn: [],
+            availableActions: []
+          };
+
+          // Add the evidence to the game store
+          addEvidence(evidence);
+
+          // Add to chat items
+          setChatItems(prev => [
+            ...prev,
+            {
+              id: `evidence-${evidence.id}-${Date.now()}`,
+              type: 'evidence',
+              text: evidence.content,
+              currentText: evidence.content,
+              evidence: evidence,
+              isComplete: true,
+              chapterNumber: currentChapter
+            }
+          ]);
+        }
+      } catch (error) {
+        console.error('Error generating evidence:', error);
+      }
     }
 
     // Remove the solved action from available actions
     const updatedActions = availableActions.filter(a => a.id !== actionId);
     setLocalAvailableActions(updatedActions);
     setAvailableActions(updatedActions);
-    };
+  };
 
   useEffect(() => {
     setIsLoading(true);
@@ -548,7 +701,7 @@ export default function StoryDevelopment() {
       chapter: currentChapter,
       currentLocation: '221B Baker Street',
       recentDialogue: dialogueHistory,
-      evidence,
+      evidence: existingEvidence,
     }).then(() => {
       setIsLoading(false);
     });
@@ -558,193 +711,361 @@ export default function StoryDevelopment() {
     };
   }, []);
 
+  const processStreamingText = (content: string, type: string, currentItems: ChatItem[], currentChapter: number) => {
+    if (!content) return currentItems;
   
-  // Update streaming response handling
-  useEffect(() => {
-    if (streamingState.fullResponse) {     
-      console.log('Received streaming response:', streamingState.fullResponse); 
-      // Create array to hold new chat items for the current chapter
-      const newChatItems: ChatItem[] = [];
-      
-      // Add chapter title if it exists and hasn't been added for current chapter
-      if (streamingState.fullResponse.chapterTitle && 
-          !chatItems.some(item => 
-            item.type === 'chapter-title' && 
-            item.chapterNumber === currentChapter
-          )) {
-        newChatItems.push({
-          id: `chapter-${currentChapter}-title`,
-          type: 'chapter-title',
-          text: `Chapter ${currentChapter}: ${streamingState.fullResponse.chapterTitle}`,
-          currentText: `Chapter ${currentChapter}: ${streamingState.fullResponse.chapterTitle}`,
-          isComplete: true,
-          chapterNumber: currentChapter
-        });
-      }
-
-      // Add narrative for current chapter - only if it doesn't exist yet
-      const narrativeExists = chatItems.some(item => 
-        item.type === 'narrative' && 
-        item.chapterNumber === currentChapter
+    let marker = '';
+    let start = 0;
+    let end = content.length;
+  
+    switch(type) {
+      case 'chapter-title':
+        marker = '###CHAPTER###';
+        start = content.indexOf(marker);
+        end = content.indexOf('###', start + marker.length);
+        break;
+      case 'narrative':
+        marker = '###NARRATIVE###';
+        start = content.indexOf(marker);
+        end = content.indexOf('###', start + marker.length);
+        break;
+      case 'dialogue':
+        marker = '###DIALOGUE###';
+        start = content.indexOf(marker);
+        end = content.indexOf('###', start + marker.length);
+        break;
+      case 'deductions':
+        marker = '###DEDUCTIONS###';
+        start = content.indexOf(marker);
+        end = content.indexOf('###', start + marker.length);
+        break;
+      case 'evidence':
+        marker = '###EVIDENCE###';
+        start = content.indexOf(marker);
+        end = content.indexOf('###', start + marker.length);
+        break;
+      case 'action':
+        marker = '###ACTION###';
+        start = content.indexOf(marker);
+        end = content.indexOf('###', start + marker.length);
+        break;
+      default:
+        return currentItems;
+    }
+  
+    if (start === -1) return currentItems;
+    if (end === -1) end = content.length;
+  
+    const text = content.slice(start + marker.length, end).trim();
+  
+    // For dialogue, we need to process multiple speaker/text pairs
+    if (type === 'chapter-title') {
+      // For chapter titles, we want to ensure we have the complete title
+      const existingIndex = currentItems.findIndex(
+        item => item.type === type && item.chapterNumber === currentChapter
       );
 
-      if (streamingState.narrative && !narrativeExists) {
-        newChatItems.push({
-          id: `narrative-${currentChapter}`,
-          type: 'narrative',
-          text: streamingState.narrative,
-          currentText: '',  // Start empty for typing animation
+      if (existingIndex === -1) {
+        // Add new chapter title item
+        return [
+          {
+            id: `chapter-${currentChapter}-${Date.now()}`,
+            type: 'chapter-title',
+            text: text,
+            currentText: text,
+            isComplete: true,
+            chapterNumber: currentChapter
+          },
+          ...currentItems
+        ];
+      } else {
+        // Update existing chapter title
+        return currentItems.map((item, index) => 
+          index === existingIndex
+            ? { ...item, text: text, currentText: text, isComplete: true }
+            : item
+        );
+      }
+    } else {
+      // For narrative 
+      const existingIndex = currentItems.findIndex(
+        item => item.type === type && item.chapterNumber === currentChapter
+      );
+
+      if (existingIndex === -1) {
+        // Add new item at the correct position
+        const insertIndex = getInsertIndex(currentItems, type);
+        const newItem = {
+          id: `${type}-${currentChapter}-${Date.now()}`,
+          type: type as any,
+          text,
+          currentText: text,
           isComplete: false,
           chapterNumber: currentChapter
-        });
-      }
-
-      // Update existing narrative text if it exists
-      if (streamingState.narrative && narrativeExists) {
-        setChatItems(prev => prev.map(item => {
-          if (item.type === 'narrative' && item.chapterNumber === currentChapter) {
-            return {
-              ...item,
-              text: streamingState.narrative
-            };
-          }
-          return item;
-        }));
-      }
-
-      // Handle dialogue entries for current chapter - skip narrative entries
-      streamingState.fullResponse.dialogueEntries?.forEach(entry => {
-        if (entry.speaker === 'NARRATOR') return; // Skip narrator entries as they're handled above
-        
-        const dialogueId = `dialogue-${currentChapter}-${entry.text}`;
-        if (!chatItems.some(item => item.id === dialogueId)) {
-          newChatItems.push({
-            id: dialogueId,
-            type: 'dialogue',
-            text: entry.text,
-            currentText: entry.text,
-            speaker: entry.speaker,
-            isComplete: true,
-            chapterNumber: currentChapter
-          });
-          addDialogue({
-            text: entry.text,
-            speaker: entry.speaker || '',
-            timestamp: new Date().toISOString()
-          });
-        }
-      });
-
-      // Handle deductions for current chapter
-      streamingState.fullResponse.deductions?.forEach(deduction => {
-        const deductionId = `deduction-${currentChapter}-${deduction.conclusion}`;
-        if (!chatItems.some(item => item.id === deductionId)) {
-          const deductionText = `${deduction.conclusion}\n\nBased on: ${deduction.observation}`;
-          newChatItems.push({
-            id: deductionId,
-            type: 'deduction',
-            text: deductionText,
-            currentText: deductionText,
-            isComplete: true,
-            chapterNumber: currentChapter
-          });
-        }
-      });
-
-      // Handle evidence for current chapter
-      streamingState.fullResponse.evidence?.forEach(evidenceItem => {
-        const evidenceId = `evidence-${currentChapter}-${evidenceItem.id}`;
-        if (!chatItems.some(item => item.id === evidenceId)) {
-          newChatItems.push({
-            id: evidenceId,
-            type: 'evidence',
-            text: `New Evidence Discovered: ${evidenceItem.title}`,
-            currentText: `New Evidence Discovered: ${evidenceItem.title}`,
-            isComplete: true,
-            evidence: evidenceItem,
-            chapterNumber: currentChapter
-          });
-          addEvidence(evidenceItem);
-        }
-      });
-
-      // Only update state if there are new items
-      if (newChatItems.length > 0) {
-        setChatItems(prev => {
-          let updatedItems = [...prev];
-          
-          // Handle chapter title separately - it always goes at index 0
-          const titleItem = newChatItems.find(item => item.type === 'chapter-title');
-          const otherItems = newChatItems.filter(item => item.type !== 'chapter-title');
-          
-          if (titleItem) {
-            if (prev.length === 0) {
-              updatedItems = [titleItem];
-            } else {
-              // Insert title at beginning
-              updatedItems.unshift(titleItem);
-            }
-          }
-          
-          // Find where the current chapter's content starts
-          const chapterStart = updatedItems.findIndex(
-            item => item.chapterNumber === currentChapter && item.type !== 'chapter-title'
-          );
-          
-          if (chapterStart === -1) {
-            // Append other items at the end
-            updatedItems = [...updatedItems, ...otherItems];
-          } else {
-            // Insert other items after the chapter's existing content
-            updatedItems.splice(chapterStart, 0, ...otherItems);
-          }
-          
-          return updatedItems;
-        });
-      }
-
-      // Update available actions
-      if (streamingState.fullResponse.availableActions) {
-        setLocalAvailableActions(streamingState.fullResponse.availableActions);
-        setAvailableActions(streamingState.fullResponse.availableActions);
-      }
-    }
-  }, [streamingState.fullResponse, currentChapter]);
-
-  // Handle streaming text animation
-  useEffect(() => {
-    if (chatItems.length === 0 || activeItemIndex >= chatItems.length) return;
-
-    const currentItem = chatItems[activeItemIndex];
-    if (currentItem.isComplete) {
-      if (activeItemIndex < chatItems.length - 1) {
-        setActiveItemIndex(prev => prev + 1);
-      }
-      return;
-    }
-
-    const fullText = currentItem.text;
-    const currentText = currentItem.currentText || '';
-
-    if (currentText.length < fullText.length) {
-      const timeoutId = setTimeout(() => {
-        setChatItems(prev => prev.map((item, index) => 
-          index === activeItemIndex
+        };
+        return [
+          ...currentItems.slice(0, insertIndex),
+          newItem,
+          ...currentItems.slice(insertIndex)
+        ];
+      } else {
+        // Update existing item
+        return currentItems.map((item, index) => 
+          index === existingIndex
             ? { 
                 ...item, 
-                currentText: fullText.slice(0, currentText.length + 1)
+                text,
+                currentText: text
               }
             : item
-        ));
-      }, typingSpeed);
-
-      return () => clearTimeout(timeoutId);
-    } else {
-      setChatItems(prev => prev.map((item, index) => 
-        index === activeItemIndex ? { ...item, isComplete: true } : item
-      ));
+        );
+      }
     }
-  }, [chatItems, activeItemIndex]);
+  };
+
+  // Update the dialogue processing useEffect
+  useEffect(() => {
+    if (!streamingState.content) return;
+
+    const content = streamingState.content;
+  
+   // Inside the useEffect that processes streamingState.content
+    if (content.includes('###DIALOGUE###')) {
+      const dialogueMatch = content.match(/###DIALOGUE###([\s\S]*?)(?=###|$)/);
+      if (dialogueMatch && dialogueMatch[1]) {
+        const dialogueContent = dialogueMatch[1].trim();
+        // console.log('Found complete dialogue section:', dialogueContent);
+        // Split content into complete speaker/text pairs
+        const dialoguePairs = dialogueContent.split('##SPEAKER##').filter(pair => pair.trim());
+        console.log('dialoguePairs', dialoguePairs);
+        dialoguePairs.forEach(pair => {
+          const [speaker, text] = pair.split('##TEXT##').map(part => part.trim());
+          if (speaker && text) {
+            // Check if this dialogue is already processed
+            const dialogueKey = `dialogue-${speaker}-${text}`;
+            if (!processedSections.has(dialogueKey)) {
+              processedSections.add(dialogueKey);
+              
+              // Add the complete dialogue as a single ChatItem
+              setChatItems(prev => [
+                ...prev,
+                {
+                  id: `dialogue-${currentChapter}-${Date.now()}`,
+                  type: 'dialogue',
+                  text: text,
+                  currentText: '',
+                  speaker: speaker,
+                  isComplete: false,
+                  chapterNumber: currentChapter
+                }
+              ]);
+            }
+          }
+        });
+      }
+    }
+
+    // Check for evidence text
+    if (content.includes('###EVIDENCE###')) {
+      try {
+        const evidenceMatch = content.match(/###EVIDENCE###([\s\S]*?)(?=###|$)/);
+        if (evidenceMatch && evidenceMatch[1]) {
+          const evidenceText = evidenceMatch[1].trim();
+          // Only process if we have a complete evidence section
+          if (evidenceText.includes(']')) {
+            console.log('Found complete evidence section:', evidenceText);
+            try {
+              const evidenceData = JSON.parse(evidenceText);
+              console.log('Parsed evidence data:', evidenceData);
+              if (Array.isArray(evidenceData)) {
+                evidenceData.forEach(evidence => {
+                  console.log('Processing evidence item:', evidence);
+                  if (!processedEvidenceIds.has(evidence.id)) {
+                    processedEvidenceIds.add(evidence.id);
+                    const evidenceContent = evidence.content || evidence.details?.text || evidence.description || '';
+                    console.log('Evidence content to display:', evidenceContent);
+                    setChatItems(prev => [
+                      ...prev,
+                      {
+                        id: `evidence-${evidence.id}-${Date.now()}`,
+                        type: 'evidence',
+                        text: evidenceContent,
+                        currentText: evidenceContent,
+                        isComplete: true,
+                        evidence: evidence,
+                        chapterNumber: currentChapter
+                      }
+                    ]);
+                  }
+                });
+              }
+            } catch (parseError) {
+              console.error('Error parsing evidence JSON:', parseError);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error processing evidence:', error);
+      }
+    }
+
+    // Check for deductions
+    if (content.includes('###DEDUCTIONS###')) {
+      try {
+        const deductionsMatch = content.match(/###DEDUCTIONS###([\s\S]*?)(?=###|$)/);
+        if (deductionsMatch && deductionsMatch[1]) {
+          const deductionsText = deductionsMatch[1].trim();
+          // Only process if we have a complete deductions section
+          if (deductionsText.includes(']')) {
+            console.log('Found complete deductions section:', deductionsText);
+            try {
+              const deductionsData = JSON.parse(deductionsText);
+              console.log('Parsed deductions data:', deductionsData);
+              if (Array.isArray(deductionsData)) {
+                deductionsData.forEach(deduction => {
+                  console.log('Processing deduction item:', deduction);
+                  if (!processedDeductionIds.has(deduction.id)) {
+                    processedDeductionIds.add(deduction.id);
+                    const deductionContent = deduction.description;
+                    console.log('Deduction content to display:', deductionContent);
+                    setChatItems(prev => [
+                      ...prev,
+                      {
+                        id: `deduction-${deduction.id}-${Date.now()}`,
+                        type: 'deduction',
+                        text: deductionContent,
+                        currentText: deductionContent,
+                        isComplete: true,
+                        deduction: deduction,
+                        chapterNumber: currentChapter
+                      }
+                    ]);
+                  }
+                });
+              }
+            } catch (parseError) {
+              console.error('Error parsing deductions JSON:', parseError);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error processing deductions:', error);
+      }
+    }
+
+    // Check for actions
+    if (content.includes('###ACTION###')) {
+      setIsLoadingActions(true);
+      try {
+        const actionMatch = content.match(/###ACTION###([\s\S]*?)(?=###|$)/);
+        if (actionMatch && actionMatch[1]) {
+          const actionText = actionMatch[1].trim();
+          // Only process if we have a complete action section
+          if (actionText.includes('}')) {  
+            console.log('Found complete action section:', actionText);
+            try {
+              const action = JSON.parse(actionText);
+              console.log('Parsed action data:', action);
+
+              // Store action in state
+              setAvailableActions([action]);
+              setLocalAvailableActions([action]);
+
+              // Skip if we've already processed this action
+              if (!processedSections.has(`action-${action.id}`)) {
+                setProcessedSections(prev => new Set(prev).add(`action-${action.id}`));
+
+                // Add action to chat items
+                setChatItems(prev => [
+                  ...prev,
+                  {
+                    id: `action-${action.id}-${Date.now()}`,
+                    type: 'action',
+                    text: action.text || '',
+                    currentText: action.text || '',
+                    isComplete: true,
+                    action: action,
+                    onSolve: handleActionSolved,
+                    onChapterProgress: () => setCurrentChapter(prev => prev + 1),
+                    chapterNumber: currentChapter
+                  }
+                ]);
+
+                // Load required evidence for the action if needed
+                if (action.requiresEvidence && Array.isArray(action.requiresEvidence)) {
+                  action.requiresEvidence.forEach(evidenceId => {
+                    if (!existingEvidence.some(e => e.id === evidenceId)) {
+                      addEvidence({
+                        id: evidenceId,
+                        title: action.text || 'Loading...',
+                        content: action.challenge?.question || 'Loading evidence...',
+                        description: '',
+                        discoveredAt: new Date().toISOString(),
+                        usedIn: [],
+                        availableActions: []
+                      });
+                    }
+                  });
+                }
+              }
+            } catch (parseError) {
+              console.error('Error parsing action JSON:', parseError);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error processing actions:', error);
+      } finally {
+        setIsLoadingActions(false);
+      }
+    }
+
+    // Check for other content types
+    if (content.includes('###CHAPTER###')) {
+      setChatItems(prev => processStreamingText(content, 'chapter-title', prev, currentChapter));
+    }
+
+    if (content.includes('###NARRATIVE###')) {
+      setChatItems(prev => processStreamingText(content, 'narrative', prev, currentChapter));
+    }
+
+    // Set all items to complete when streaming is done
+    if (streamingState.isComplete) {
+      setChatItems(prev => prev.map(item => ({ ...item, isComplete: true })));
+      setIsAllComplete(true);
+    }
+
+  }, [streamingState.content, streamingState.isComplete]);
+
+  useEffect(() => {
+    const currentItem = chatItems[activeItemIndex];
+    if (!currentItem || currentItem.isComplete || currentItem.type !== 'dialogue') return;
+  
+    let charIndex = 0;
+    const targetText = currentItem.text;
+    
+    const timer = setInterval(() => {
+      if (charIndex <= targetText.length) {
+        setChatItems(items => 
+          items.map((item, index) => 
+            index === activeItemIndex
+              ? { 
+                  ...item, 
+                  currentText: targetText.slice(0, charIndex + 1),
+                  isComplete: charIndex + 1 >= targetText.length
+                }
+              : item
+          )
+        );
+        charIndex++;
+      } else {
+        clearInterval(timer);
+        setActiveItemIndex(prev => prev + 1);
+      }
+    }, typingSpeed);
+  
+    return () => clearInterval(timer);
+  }, [chatItems, activeItemIndex, typingSpeed]);
 
   // Check if all items are complete
   useEffect(() => {
@@ -758,25 +1079,38 @@ export default function StoryDevelopment() {
     }
   }, [chatItems]);
 
+  console.log('Available actions:', availableActions);
+
   // Helper function to determine the correct insert position for new items
   const getInsertIndex = (items: ChatItem[], type: string): number => {
     const orderPriority: { [key: string]: number } = {
-      'chapter-title': 0,
-      'narrative': 1,
-      'dialogue': 2,
-      'deduction': 3,
-      'evidence': 4
+      'chapter-title': 1,
+      'narrative': 2,
+      'dialogue': 3,
+      'deduction': 4,
+      'evidence': 5,
+      'actions': 6
     };
 
     const newItemPriority = orderPriority[type] || 999;
+    let insertIndex = 0;
     
+    // Find the last item of the same type or the first item of a lower priority type
     for (let i = items.length - 1; i >= 0; i--) {
       const currentPriority = orderPriority[items[i].type] || 999;
-      if (currentPriority <= newItemPriority) {
+      
+      if (currentPriority === newItemPriority) {
+        // Insert after the last item of the same type
+        return i + 1;
+      }
+      
+      if (currentPriority < newItemPriority) {
+        // Insert after items with lower priority
         return i + 1;
       }
     }
-    return 0;
+    
+    return insertIndex;
   };
 
   const handleChapterProgression = async () => {
@@ -794,7 +1128,7 @@ export default function StoryDevelopment() {
       chapter: nextChapter,
       currentLocation: '221B Baker Street',
       recentDialogue: dialogueHistory,
-      evidence,
+      evidence: existingEvidence,
     });
   };
 
@@ -819,7 +1153,7 @@ export default function StoryDevelopment() {
       currentLocation: '221B Baker Street',
       selectedAction: action,
       recentDialogue: dialogueHistory,
-      evidence: evidence,
+      evidence: existingEvidence,
     });
   };
 
@@ -827,7 +1161,7 @@ export default function StoryDevelopment() {
     const context: any = {
       phase: 'STORY_DEVELOPMENT',
       selectedAction: actionId,
-      evidence: evidence,
+      evidence: existingEvidence,
       recentDialogue: dialogueHistory.slice(-3),
       recentDeductions: [],
     };
@@ -847,7 +1181,7 @@ export default function StoryDevelopment() {
     const context: any = {
       phase: 'STORY_DEVELOPMENT',
       selectedSolution: solution,
-      evidence: evidence,
+      evidence: existingEvidence,
       recentDialogue: dialogueHistory.slice(-3),
       recentDeductions: [],
     };
@@ -855,6 +1189,7 @@ export default function StoryDevelopment() {
     await startStreaming('STORY_DEVELOPMENT', context);
   };
 
+  console.log('Chat items:', chatItems);
   return (
     <motion.div 
       initial={{ opacity: 0 }}
@@ -870,12 +1205,13 @@ export default function StoryDevelopment() {
           <div className="space-y-0">
             {/* Group items by chapter and render them */}
             {Array.from(new Set(chatItems.map(item => item.chapterNumber)))
-              .sort((a, b) => (a || 0) - (b || 0))
-              .map(chapterNum => (
-                <div key={`chapter-${chapterNum}`} className="mb-16">
-                  {chatItems
-                    .filter(item => item.chapterNumber === chapterNum)
-                    .map((item, index) => (
+            .sort((a, b) => (a || 0) - (b || 0))
+            .map(chapterNum => (
+              <div key={`chapter-${chapterNum}`} className="mb-16">
+                {chatItems
+                  .filter(item => item.chapterNumber === chapterNum)
+                  .map((item) => {
+                    return (
                       <motion.div
                         key={item.id}
                         initial={{ opacity: 0, y: 20 }}
@@ -884,47 +1220,29 @@ export default function StoryDevelopment() {
                       >
                         <StoryBlock
                           type={item.type}
-                          text={item.currentText}
+                          text={item.text}
+                          currentText={item.currentText}
                           speaker={item.speaker}
                           isTyping={!item.isComplete}
                           evidence={item.evidence}
+                          deduction={item.deduction}
+                          action={item.action}
+                          onSolve={item.onSolve}
+                          onChapterProgress={item.onChapterProgress}
                         />
-
-                        {item.type === 'evidence' && item.evidence && (
-                          <div className="mt-2 mb-8">
-                            <EvidenceDisplay evidence={item.evidence} />
-                          </div>
-                        )}
                       </motion.div>
-                    ))}
-
-                  {/* Show challenge cards for current chapter only */}
-                  {chapterNum === currentChapter && availableActions.length > 0 && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.5 }}
-                      className="mt-16"
-                    >
-                      <div className="text-lg font-medium text-stone-800 mb-6 flex items-center">
-                        <span className="mr-2">Watson can you solve this challenge?</span>
-                        <div className="flex-grow h-px bg-stone-200" />
-                      </div>
-                      {availableActions.map(action => (
-                        <ChallengeCard
-                          key={action.id}
-                          action={action}
-                          onSolve={() => handleActionSolved(action.id)}
-                          evidence={evidence}
-                          onChapterProgress={handleChapterProgression}
-                        />
-                      ))}
-                    </motion.div>
-                  )}
+                    );
+                  })}
                 </div>
               ))}
           </div>
           <div ref={storyEndRef} />
+        </div>
+      )}
+      {isLoadingActions && (
+        <div className="mt-8 flex items-center justify-center">
+          <Loading />
+          <span className="ml-2 text-stone-600">Loading available actions...</span>
         </div>
       )}
     </motion.div>

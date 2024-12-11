@@ -68,7 +68,7 @@ interface GameState {
 }
 
 export const useGameStore = create<GameState>((set) => ({
-  phase: 'HOLMES_INITIAL_REACTION',
+  phase: 'STORY_DEVELOPMENT',
   dialogueHistory: [],
   deductions: [],
   evidence: [],
