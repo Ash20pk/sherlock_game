@@ -4,7 +4,6 @@ import { useGameStore } from '@/store/gameState';
 import { useStreamingResponse } from '@/hooks/useStreamingResponse';
 
 const StoryBlock = ({ type, text, speaker, isTyping }) => {
-  console.log('Rendering StoryBlock:', { type, text, speaker, isTyping });
   const getTextStyle = () => {
     switch (type) {
       case 'narrative':
@@ -67,7 +66,7 @@ export default function HolmesInitialReaction() {
   const processContent = (content) => {
     if (!content) return null;
 
-    // Check for duplicate markers - if found, stop streaming
+    // Check for duplicate markers - if found, stop streaming and show Watson choice
     const narrativeCount = (content.match(/###NARRATIVE###/g) || []).length;
     const dialogueCount = (content.match(/###DIALOGUE###/g) || []).length;
     
@@ -87,7 +86,7 @@ export default function HolmesInitialReaction() {
       return;
     }
     
-    // Extract narrative - only process first occurrence
+    // Extract narrative content...
     const narrativeMarker = '###NARRATIVE###';
     if (content.includes(narrativeMarker)) {
       const start = content.indexOf(narrativeMarker) + narrativeMarker.length;
@@ -96,14 +95,13 @@ export default function HolmesInitialReaction() {
       setNarration(narrative.trim());
     }
 
-    // Process dialogue in real-time - only process first dialogue section
+    // Process dialogue content...
     const dialogueMarker = '###DIALOGUE###';
     if (content.includes(dialogueMarker)) {
       const dialogueStart = content.indexOf(dialogueMarker) + dialogueMarker.length;
       const nextSection = content.indexOf('###', dialogueStart);
       const dialogueContent = nextSection === -1 ? content.slice(dialogueStart) : content.slice(dialogueStart, nextSection);
 
-      // Look for speaker marker
       if (dialogueContent.includes('##SPEAKER##')) {
         const speakerStart = dialogueContent.lastIndexOf('##SPEAKER##') + '##SPEAKER##'.length;
         const speakerEnd = dialogueContent.indexOf('##TEXT##', speakerStart);
@@ -111,16 +109,15 @@ export default function HolmesInitialReaction() {
         if (speakerEnd !== -1) {
           const speaker = dialogueContent.slice(speakerStart, speakerEnd).trim();
           if (speaker !== currentSpeaker) {
-            // New speaker - complete previous dialogue if exists
             if (currentSpeaker && currentDialogue) {
               const cleanDialogue = currentDialogue
-                .replace(/##SPE.*$/, '') // Remove partial ##SPEAKER## markers
-                .replace(/###DED.*$/, '') // Remove partial ###DEDUCTIONS### markers
-                .replace(/###DIALOGUE###.*$/, '') // Remove partial ###DIALOGUE### markers
-                .replace(/^\"|\"$/g, '') // Remove outer quotes
-                .replace(/^\"|\"|\"$/g, '') // Remove any remaining quotes
-                .replace(/^\[|\]$/g, '') // Remove leading and trailing square brackets
-                .replace(/##S.*$/, '') // Remove ##SPEAKER## markers
+                .replace(/##SPE.*$/, '')
+                .replace(/###DED.*$/, '')
+                .replace(/###DIALOGUE###.*$/, '')
+                .replace(/^\"|\"$/g, '')
+                .replace(/^\"|\"|\"$/g, '')
+                .replace(/^\[|\]$/g, '')
+                .replace(/##S.*$/, '')
                 .trim();
 
               if (cleanDialogue) {
@@ -132,11 +129,9 @@ export default function HolmesInitialReaction() {
             setCurrentSpeaker(speaker);
           }
           
-          // Get the text after ##TEXT##
           const textStart = speakerEnd + '##TEXT##'.length;
           let text;
           
-          // Look for the next speaker or deductions marker
           const nextSpeaker = dialogueContent.indexOf('##SPEAKER##', textStart);
           const deductionsMarker = dialogueContent.indexOf('###DEDUCTIONS###', textStart);
           
@@ -148,10 +143,16 @@ export default function HolmesInitialReaction() {
             text = dialogueContent.slice(textStart);
           }
           
-          // Clean up the text
           const cleanText = text
-            .replace(/^\"|\"$/g, '') // Remove outer quotes
-            .replace(/^\"|\"|\"$/g, '') // Remove any remaining quotes
+            .replace(/^\"|\"$/g, '')
+            .replace(/^\"|\"|\"$/g, '')
+            .replace(/##SPE.*$/, '')
+            .replace(/###DED.*$/, '')
+            .replace(/###DIALOGUE###.*$/, '')
+            .replace(/^\"|\"$/g, '')
+            .replace(/^\"|\"|\"$/g, '')
+            .replace(/^\[|\]$/g, '')
+            .replace(/##S.*$/, '')
             .trim();
             
           if (cleanText) {
@@ -161,7 +162,7 @@ export default function HolmesInitialReaction() {
       }
     }
 
-    // Extract deductions - only process when streaming is complete
+    // Process deductions when streaming is complete
     if (streamingState.isComplete && content.includes('###DEDUCTIONS###')) {
       const deductionsMarker = '###DEDUCTIONS###';
       const deductionsStart = content.indexOf(deductionsMarker) + deductionsMarker.length;
@@ -185,8 +186,11 @@ export default function HolmesInitialReaction() {
         const cleanDialogue = currentDialogue
           .replace(/##SPE.*$/, '')
           .replace(/###DED.*$/, '')
-          .replace(/^\"|\"$/g, '') // Remove outer quotes
-          .replace(/^\"|\"|\"$/g, '') // Remove any remaining quotes
+          .replace(/###DIALOGUE###.*$/, '')
+          .replace(/^\"|\"$/g, '')
+          .replace(/^\"|\"|\"$/g, '')
+          .replace(/^\[|\]$/g, '')
+          .replace(/##S.*$/, '')
           .trim();
 
         if (cleanDialogue) {
@@ -204,8 +208,18 @@ export default function HolmesInitialReaction() {
           dialogue: item.line
         });
       });
+
+      // Show Watson choice when streaming is complete
+      setShowWatsonChoice(true);
     }
   };
+
+  // Set showWatsonChoice when stream is complete
+  useEffect(() => {
+    if (streamingState.isComplete) {
+      setShowWatsonChoice(true);
+    }
+  }, [streamingState.isComplete]);
 
   useEffect(() => {
     if (!streamingState.content) return;

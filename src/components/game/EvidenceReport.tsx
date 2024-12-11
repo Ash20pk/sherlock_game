@@ -6,6 +6,7 @@ interface EvidenceReportProps {
     caseNumber: string;
     date: string;
     location: string;
+    type?: string;
   };
   description: string;
   content: string;
@@ -31,18 +32,27 @@ const EvidenceReport: FC<EvidenceReportProps> = ({ metadata, description, conten
         
         <span className="metadata-label">Location:</span>
         <span>{metadata.location}</span>
+        
+        {metadata.type && (
+          <>
+            <span className="metadata-label">Type:</span>
+            <span>{metadata.type}</span>
+          </>
+        )}
       </div>
 
-      <div className="content-section">
-        <div className="content-heading">Description</div>
-        <div className="evidence-content">
-          {description}
+      {description && (
+        <div className="content-section">
+          <div className="content-heading">Description</div>
+          <div className="evidence-content">
+            {description}
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="content-section">
         <div className="content-heading">Collected Evidence</div>
-        <div className="evidence-content">
+        <div className="evidence-content evidence-text">
           {content}
         </div>
       </div>

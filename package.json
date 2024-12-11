@@ -12,6 +12,7 @@
     "@react-spring/three": "^9.7.5",
     "@react-three/drei": "^9.117.3",
     "@react-three/fiber": "^8.17.10",
+    "@types/react-window": "^1.8.8",
     "ai": "^4.0.8",
     "framer-motion": "^11.12.0",
     "gsap": "^3.12.5",
@@ -21,6 +22,7 @@
     "openai": "^4.73.1",
     "react": "^18",
     "react-dom": "^18",
+    "react-window": "^1.8.10",
     "three": "^0.170.0",
     "zustand": "^5.0.1"
   },
