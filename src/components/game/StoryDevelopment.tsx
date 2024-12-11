@@ -834,32 +834,47 @@ export default function StoryDevelopment() {
       const dialogueMatch = content.match(/###DIALOGUE###([\s\S]*?)(?=###|$)/);
       if (dialogueMatch && dialogueMatch[1]) {
         const dialogueContent = dialogueMatch[1].trim();
-        // console.log('Found complete dialogue section:', dialogueContent);
-        // Split content into complete speaker/text pairs
         const dialoguePairs = dialogueContent.split('##SPEAKER##').filter(pair => pair.trim());
-        console.log('dialoguePairs', dialoguePairs);
+        
         dialoguePairs.forEach(pair => {
           const [speaker, text] = pair.split('##TEXT##').map(part => part.trim());
           if (speaker && text) {
-            // Check if this dialogue is already processed
-            const dialogueKey = `dialogue-${speaker}-${text}`;
-            if (!processedSections.has(dialogueKey)) {
-              processedSections.add(dialogueKey);
+            setChatItems(prev => {
+              // Find the last dialogue item from this speaker
+              const lastIndex = [...prev].reverse().findIndex(
+                item => item.type === 'dialogue' && item.speaker === speaker
+              );
               
-              // Add the complete dialogue as a single ChatItem
-              setChatItems(prev => [
-                ...prev,
-                {
-                  id: `dialogue-${currentChapter}-${Date.now()}`,
-                  type: 'dialogue',
-                  text: text,
-                  currentText: '',
-                  speaker: speaker,
-                  isComplete: false,
-                  chapterNumber: currentChapter
-                }
-              ]);
-            }
+              // If we found a previous dialogue from this speaker and it's not complete
+              if (lastIndex !== -1 && !prev[prev.length - 1 - lastIndex].isComplete) {
+                // Update existing dialogue
+                return prev.map((item, index) => {
+                  if (index === prev.length - 1 - lastIndex) {
+                    return {
+                      ...item,
+                      text: text,
+                      currentText: text,
+                      isComplete: text.endsWith('##')
+                    };
+                  }
+                  return item;
+                });
+              } else {
+                // Create new dialogue item
+                return [
+                  ...prev,
+                  {
+                    id: `dialogue-${currentChapter}-${Date.now()}`,
+                    type: 'dialogue',
+                    text: text,
+                    currentText: text,
+                    speaker: speaker,
+                    isComplete: text.endsWith('##'),
+                    chapterNumber: currentChapter
+                  }
+                ];
+              }
+            });
           }
         });
       }
