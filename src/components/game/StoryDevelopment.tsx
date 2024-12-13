@@ -1,10 +1,11 @@
-import { motion } from 'framer-motion'
-import { useGameStore } from '@/store/gameState'
-import { useEffect, useState, useRef, useCallback } from 'react'
-import { useStreamingResponse } from '@/hooks/useStreamingResponse'
-import { Action, Evidence, DeductionEntry } from '@/store/gameState'
-import EvidenceReport  from './EvidenceReport'
-import { Loading } from './Loading'
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { motion } from 'framer-motion';
+import { useGameStore } from '@/store/gameState';
+import { useStreamingResponse } from '@/hooks/useStreamingResponse';
+import { Scroll, BookOpen, MapPin, Feather, Hourglass, Eye, Brain, Flask, Lock } from 'lucide-react';
+import { Action, Evidence, DeductionEntry } from '@/store/gameState';
+import EvidenceReport from './EvidenceReport';
+import { Loading } from './Loading';
 
 interface ChatItem {
   id: string;
@@ -21,162 +22,124 @@ interface ChatItem {
   chapterNumber?: number;
 }
 
-const EvidenceDisplay: React.FC<{ evidence: Evidence }> = ({ evidence }) => {
-  console.log('Rendering evidence:', evidence);
-  
-  // Get the content from various possible fields
-  const content = evidence.content || evidence.details?.text || evidence.description || '';
-  console.log('Evidence content:', content);
-
-  return (
-    <div className="rounded-lg">
-      <div className="text-sm text-amber-600 mb-2">Evidence</div>
-      <div className="text-stone-700 mt-1 italic">
-        {typeof content === 'object' && 'text' in content ? content.text : content}
-      </div>
-    </div>
-  );
-};
-
-const DeductionDisplay: React.FC<{ deduction: DeductionEntry }> = ({ deduction }) => {
-
-  console.log('Rendering deduction:', deduction);
-  return (
-    <div>
-      <div className="text-sm text-amber-600 mb-2">Deductions</div>
-      <div className="text-stone-700 italic">
-        "{deduction.description}"
-      </div>
-    </div>
-  );
-};
-
 const StoryBlock = ({ 
-  type,
-  text,
-  currentText,
-  speaker,
-  isTyping,
-  evidence,
-  deduction,
-  action,
-  onSolve,
-  onChapterProgress
-}: {
-  type: string;
-  text: string;
-  currentText: string;
-  speaker?: string;
-  isTyping: boolean;
-  evidence?: Evidence;
-  deduction?: DeductionEntry;
-  action?: Action;
-  onSolve?: (actionId: string) => void;
-  onChapterProgress?: () => void;
+  type, 
+  text, 
+  currentText, 
+  speaker, 
+  isTyping, 
+  evidence, 
+  deduction, 
+  action, 
+  onSolve, 
+  onChapterProgress,
+  existingEvidence 
 }) => {
   const getTextStyle = () => {
     switch (type) {
       case 'narrative':
-      case 'chapter-title':
-        return 'text-stone-800 font-serif';
+        return 'text-stone-800 prose prose-stone font-serif leading-relaxed';
       case 'dialogue':
-        return 'text-stone-900';
-      case 'evidence':
-        return 'text-amber-800';
+        return 'text-stone-900 font-serif';
       case 'deduction':
-        return 'text-stone-800 italic';
-      case 'action':
-        return 'text-stone-800';
+        return 'text-stone-800 italic font-serif';
       default:
-        return 'text-stone-800';
+        return 'text-stone-800 font-serif';
     }
   };
 
   const getBlockStyle = () => {
     switch (type) {
       case 'chapter-title':
-        return 'mb-8 text-center text-2xl';
+        return 'relative my-12 text-center';
       case 'narrative':
-        return 'mb-6';
+        return 'relative my-8 p-6 bg-stone-50 border border-stone-200 rounded-sm shadow-sm';
       case 'deduction':
-        return 'mt-6 mb-6 pl-4 border-l-4 border-stone-300';
+        return 'relative my-8 p-6 bg-gradient-to-r from-amber-50/50 to-stone-50 border-l-4 border-amber-800/30';
       case 'evidence':
-        return 'mb-6 bg-amber-50 border-2 border-amber-200 rounded-lg p-4';
+        return 'relative my-8 p-6 bg-gradient-to-br from-stone-50 to-amber-50/30 border border-amber-800/20 rounded-sm';
       case 'dialogue':
-        return 'mb-6';
+        return 'relative my-8';
       case 'action':
-        return 'mb-6';
+        return 'relative my-8';
       default:
-        return 'mb-3';
+        return 'relative my-8';
     }
   };
 
   console.log('Rendering StoryBlock:', { type, text, speaker, isTyping, evidence, deduction, action });
 
-  const renderContent = () => {
-    switch (type) {
-      case 'dialogue':
-        return (
-          <>
-            {speaker && (
-              <div className="text-stone-600 mb-1 tracking-wide font-medium">
-                {speaker}:
-              </div>
-            )}
-            <div className={`${getTextStyle()} leading-relaxed text-lg`}>
-              <span className="font-serif">"</span>
-              {text}
-              {!isTyping && (
-                <span className="inline-block w-1 h-4 ml-1 bg-stone-400 animate-pulse" />
-              )}
-              {isTyping && <span className="font-serif">"</span>}
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className={getBlockStyle()}
+    >
+      {type === 'chapter-title' ? (
+        <div className="flex flex-col items-center">
+          <Scroll className="w-8 h-8 text-amber-800 mb-4" />
+          <div className="text-3xl font-serif text-stone-800 tracking-wide">
+            {currentText}
+          </div>
+          <div className="mt-4 h-px w-32 bg-gradient-to-r from-transparent via-amber-800/30 to-transparent" />
+        </div>
+      ) : (
+        <>
+          {type === 'dialogue' && speaker && (
+            <div className="flex items-center gap-2 mb-3">
+              <Feather className="w-4 h-4 text-amber-800" />
+              <span className="text-amber-800 tracking-wide font-medium font-serif">
+                {speaker}
+              </span>
             </div>
-          </>
-        );
+          )}
 
-      case 'evidence':
-        if (evidence) {
-          return <EvidenceDisplay evidence={evidence} />;
-        }
-        break;
+          {type === 'deduction' && (
+            <div className="flex items-center gap-2 mb-3">
+              <Brain className="w-4 h-4 text-amber-800" />
+              <span className="text-amber-800 tracking-wide font-medium font-serif">
+                Deduction
+              </span>
+            </div>
+          )}
 
-      case 'deduction':
-        if (deduction) {
-          return <DeductionDisplay deduction={deduction} />;
-        }
-        break;
-
-      case 'action':
-        if (action && onSolve && onChapterProgress) {
-          return (
+          {type === 'action' ? (
             <ChallengeCard 
               action={action}
+              evidence={action.requiresEvidence?.map(evidenceId => ({
+                ...existingEvidence.find(e => e.id === evidenceId),
+                hint: action.challenge?.hints,
+                text: action.text,
+                type: action.type,
+                solution: action.challenge?.solution
+              }))}
               onSolve={onSolve}
               onChapterProgress={onChapterProgress}
             />
-          );
-        }
-        break;
+          ) : (
+            <div className={`${getTextStyle()} relative`}>
+              {type === 'dialogue' ? (
+                <div className="relative">
+                  <span className="font-serif text-2xl text-amber-800/20 absolute -left-4 -top-2">"</span>
+                  {currentText}
+                  {!isTyping && <span className="font-serif text-2xl text-amber-800/20">"</span>}
+                </div>
+              ) : currentText}
+              
+              {isTyping && (
+                <motion.span
+                  animate={{ opacity: [1, 0] }}
+                  transition={{ repeat: Infinity, duration: 0.8 }}
+                  className="inline-block w-1 h-4 ml-1 bg-amber-800"
+                />
+              )}
+            </div>
+          )}
 
-      default:
-        return (
-          <div className={`${getTextStyle()} leading-relaxed text-lg`}>
-            {currentText}
-            {isTyping && (
-              <span className="inline-block w-1 h-4 ml-1 bg-stone-400 animate-pulse" />
-            )}
-          </div>
-        );
-    }
-  };
-
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className={getBlockStyle()}
-    >
-      {renderContent()}
+          {/* Decorative elements */}
+          <div className="absolute -left-2 top-0 bottom-0 w-px bg-amber-800/10" />
+        </>
+      )}
     </motion.div>
   );
 };
@@ -214,22 +177,24 @@ const EvidenceItem: React.FC<{ evidence: Evidence }> = ({ evidence }) => {
       type?: string;
     };
     description?: string;
-    content?: string;
+    hint?: [];
     analysis?: string;
   }>({});
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingAnalysis, setIsLoadingAnalysis] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
 
+  console.log('Rendering EvidenceItem Key:', evidence);
+
   const loadEvidenceDetails = useCallback(async () => {
-    if (!evidenceDetails.content && !isLoading && availableActions.length > 0) {
+    if (!evidenceDetails.hint && !isLoading && availableActions.length > 0) {
       setIsLoading(true);
       try {
         const response = await fetch(
           `/api/evidence/${evidence.id}?` + new URLSearchParams({
             type: evidence.type,
             title: evidence.title,
-            content: evidence.content || '',
+            hint: evidence.hint || '',
             solution: evidence.solution || ''
           })
         );
@@ -354,7 +319,7 @@ const ChallengeCard: React.FC<{
   onSolve: () => void;
   evidence?: Evidence[];
   onChapterProgress: (actionContext?: {
-    type: 'ACTION' | 'RIDDLE' | 'PUZZLE' | 'MEDICAL' | 'OBSERVATION' | 'LOGIC' | 'PHYSICAL';
+    type: 'ACTION' | 'RIDDLE' | 'PUZZLES' | 'MEDICAL' | 'OBSERVATION' | 'LOGIC' | 'PHYSICAL';
     text?: string;
     chosenAction?: string;
     question?: string;
@@ -364,6 +329,8 @@ const ChallengeCard: React.FC<{
   const [attempt, setAttempt] = useState('');
   const [showHints, setShowHints] = useState(false);
   const [isCorrect, setIsCorrect] = useState(false);
+
+  console.log('challenge:', action);
 
   // Calculate similarity between two strings (0 to 1)
   const calculateSimilarity = (str1: string, str2: string): number => {
@@ -381,37 +348,43 @@ const ChallengeCard: React.FC<{
     const union = new Set([...words1, ...words2]);
     return intersection.size / union.size;
   };
-
   const handleSubmit = () => {
+    console.log('Submitting answer:', attempt);
+    if (action.type === 'ACTIONS') {
+      onSolve();
+      onChapterProgress({
+        type: action.type,
+        text: action.action?.text || action.text,
+        chosenAction: attempt
+      });
+      return;
+    }
+
     const similarity = calculateSimilarity(attempt, action.challenge?.solution || '');
-    // Consider it correct if similarity is above 0.1 (10% similar)
     if (similarity >= 0.1) {
       setIsCorrect(true);
       onSolve();
-      // Progress to next chapter
       onChapterProgress({
         type: action.type,
         question: action.challenge?.question || action.text,
         solution: attempt
       });
     } else {
-      // Optional: Add feedback for incorrect answers
       alert("That's not quite right. Try again!");
     }
   };
 
-  console.log('Action:', action);
-
   // Handle ACTION type differently
-  if (action.type === 'ACTION') {
+  if (action.type === 'ACTIONS' || action.type === 'Actions' || action.type === 'actions' || action.type === 'action' || action.type === 'ACTION') {
     return (
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="p-6 bg-white rounded-lg shadow-sm border-2 border-stone-100"
       >
-        <div className="text-stone-600 font-medium mb-2">Available Actions:</div>
-        {evidence && evidence.length > 0 && (
+      <div className="text-stone-800 font-medium mb-4">
+            {action.action?.text || action.text}
+          </div>        {evidence && evidence.length > 0 && (
           <div className="mb-6">
             <div className="text-stone-600 font-medium mb-2">Available Evidence:</div>
             <div className="space-y-2">
@@ -423,9 +396,6 @@ const ChallengeCard: React.FC<{
         )}
 
         <div className="prose prose-stone prose-sm">
-          <div className="text-stone-800 font-medium mb-4">
-            {action.action?.text || action.text}
-          </div>
 
           <div className="space-y-3">
             {action.action?.actionOptions?.map((option, index) => (
@@ -461,7 +431,7 @@ const ChallengeCard: React.FC<{
             <div className="text-amber-700 mt-1 text-sm">Decode the hidden message...</div>
           </div>
         );
-      case 'PUZZLE':
+      case 'PUZZLES':
         return (
           <div className="mb-4 p-4 bg-indigo-50 rounded-lg">
             <div className="text-indigo-800 font-medium">🧩 Puzzle Challenge</div>
@@ -500,6 +470,8 @@ const ChallengeCard: React.FC<{
         return null;
     }
   };
+
+  console.log('EvidenceAction:', evidence);
 
   // Challenge card for all other types
   return (
@@ -619,106 +591,12 @@ export default function StoryDevelopment() {
     storyEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [chatItems, activeItemIndex])
 
-  const handleActionSolved = async (actionId: string) => {
-    const action = availableActions.find(a => a.id === actionId);
-    console.log('handleActionSolved', actionId, action)
-    if (!action) return;
-
-    // If the action has a reward of type EVIDENCE, generate evidence content
-    if (action.reward?.type === 'EVIDENCE') {
-      try {
-        // Get the solution from the action marker
-        const actionSolution = typeof action.solution === 'string' ? action.solution : 
-                             Array.isArray(action.solution) ? action.solution.join('\n') : 
-                             action.challenge?.solution || '';
-
-        console.log('Generating evidence with params:', {
-          type: action.type,
-          title: action.reward.description,
-          content: actionSolution,
-          solution: actionSolution
-        });
-
-        const params = new URLSearchParams({
-          type: action.type || 'PUZZLE',
-          title: action.reward.description || action.text,
-          content: actionSolution,
-          solution: actionSolution
-        });
-
-        const evidenceResponse = await fetch(`/api/evidence/${actionId}?${params}`);
-
-        if (evidenceResponse.ok) {
-          const evidenceData = await evidenceResponse.json();
-          console.log('Evidence response:', evidenceData);
-          
-          // Create the evidence object with the generated content
-          const evidence = {
-            id: `${actionId}_evidence`,
-            title: action.reward.description || action.text,
-            type: action.type || 'PUZZLE',
-            content: evidenceData.content,
-            description: evidenceData.description,
-            metadata: evidenceData.metadata,
-            contentType: evidenceData['content-type'],
-            discoveredAt: new Date().toISOString(),
-            usedIn: [],
-            availableActions: []
-          };
-
-          // Add the evidence to the game store
-          addEvidence(evidence);
-
-          // Add to chat items
-          setChatItems(prev => [
-            ...prev,
-            {
-              id: `evidence-${evidence.id}-${Date.now()}`,
-              type: 'evidence',
-              text: evidence.content,
-              currentText: evidence.content,
-              evidence: evidence,
-              isComplete: true,
-              chapterNumber: currentChapter
-            }
-          ]);
-        }
-      } catch (error) {
-        console.error('Error generating evidence:', error);
-      }
-    }
-
-    // Remove the solved action from available actions
-    const updatedActions = availableActions.filter(a => a.id !== actionId);
-    setLocalAvailableActions(updatedActions);
-    setAvailableActions(updatedActions);
-  };
-
-  useEffect(() => {
-    setIsLoading(true);
-    startStreaming('STORY_DEVELOPMENT', {
-      phase: 'STORY_DEVELOPMENT',
-      chapter: currentChapter,
-      currentLocation: '221B Baker Street',
-      recentDialogue: dialogueHistory,
-      evidence: existingEvidence,
-    }).then(() => {
-      setIsLoading(false);
-    });
-
-    return () => {
-      stopStreaming();
-    };
-  }, []);
-
-  const processStreamingText = (content: string, type: string, currentItems: ChatItem[], currentChapter: number) => {
-    if (!content) return currentItems;
-  
+  const processContent = (content: string, type: string, currentItems: ChatItem[]) => {
     let marker = '';
-    let start = 0;
-    let end = content.length;
-  
-    switch(type) {
+    let start = -1;
+    let end = -1;
+
+    switch (type) {
       case 'chapter-title':
         marker = '###CHAPTER###';
         start = content.indexOf(marker);
@@ -726,11 +604,6 @@ export default function StoryDevelopment() {
         break;
       case 'narrative':
         marker = '###NARRATIVE###';
-        start = content.indexOf(marker);
-        end = content.indexOf('###', start + marker.length);
-        break;
-      case 'dialogue':
-        marker = '###DIALOGUE###';
         start = content.indexOf(marker);
         end = content.indexOf('###', start + marker.length);
         break;
@@ -758,9 +631,13 @@ export default function StoryDevelopment() {
   
     const text = content.slice(start + marker.length, end).trim();
   
-    // For dialogue, we need to process multiple speaker/text pairs
+    // Skip dialogue processing here since it's handled in the useEffect
+    if (type === 'dialogue') {
+      return currentItems;
+    }
+
+    // For chapter titles, we want to ensure we have the complete title
     if (type === 'chapter-title') {
-      // For chapter titles, we want to ensure we have the complete title
       const existingIndex = currentItems.findIndex(
         item => item.type === type && item.chapterNumber === currentChapter
       );
@@ -787,7 +664,7 @@ export default function StoryDevelopment() {
         );
       }
     } else {
-      // For narrative 
+      // For other types
       const existingIndex = currentItems.findIndex(
         item => item.type === type && item.chapterNumber === currentChapter
       );
@@ -823,7 +700,23 @@ export default function StoryDevelopment() {
     }
   };
 
-  // Update the dialogue processing useEffect
+  useEffect(() => {
+    setIsLoading(true);
+    startStreaming('STORY_DEVELOPMENT', {
+      phase: 'STORY_DEVELOPMENT',
+      chapter: currentChapter,
+      currentLocation: '221B Baker Street',
+      recentDialogue: dialogueHistory,
+      evidence: existingEvidence,
+    }).then(() => {
+      setIsLoading(false);
+    });
+
+    return () => {
+      stopStreaming();
+    };
+  }, []);
+
   useEffect(() => {
     if (!streamingState.content) return;
 
@@ -864,7 +757,7 @@ export default function StoryDevelopment() {
                 return [
                   ...prev,
                   {
-                    id: `dialogue-${currentChapter}-${Date.now()}`,
+                    id: `dialogue-${speaker}-${currentChapter}-${Date.now()}`,
                     type: 'dialogue',
                     text: text,
                     currentText: text,
@@ -1006,8 +899,9 @@ export default function StoryDevelopment() {
                   }
                 ]);
 
+                console.log('Before Processing action:', chatItems);
                 // Load required evidence for the action if needed
-                if (action.requiresEvidence && Array.isArray(action.requiresEvidence)) {
+                if (action.requiresEvidence && Array.isArray(action.requiresEvidence)) {                  
                   action.requiresEvidence.forEach(evidenceId => {
                     if (!existingEvidence.some(e => e.id === evidenceId)) {
                       addEvidence({
@@ -1037,11 +931,11 @@ export default function StoryDevelopment() {
 
     // Check for other content types
     if (content.includes('###CHAPTER###')) {
-      setChatItems(prev => processStreamingText(content, 'chapter-title', prev, currentChapter));
+      setChatItems(prev => processContent(content, 'chapter-title', prev));
     }
 
     if (content.includes('###NARRATIVE###')) {
-      setChatItems(prev => processStreamingText(content, 'narrative', prev, currentChapter));
+      setChatItems(prev => processContent(content, 'narrative', prev));
     }
 
     // Set all items to complete when streaming is done
@@ -1126,6 +1020,81 @@ export default function StoryDevelopment() {
     }
     
     return insertIndex;
+  };
+
+  const handleActionSolved = async (actionId: string) => {
+    const action = availableActions.find(a => a.id === actionId);
+    console.log('handleActionSolved', actionId, action)
+    if (!action) return;
+
+    // If the action has a reward of type EVIDENCE, generate evidence content
+    if (action.reward?.type === 'EVIDENCE') {
+      try {
+        // Get the solution from the action marker
+        const actionSolution = typeof action.solution === 'string' ? action.solution : 
+                             Array.isArray(action.solution) ? action.solution.join('\n') : 
+                             action.challenge?.solution || '';
+
+        console.log('Generating evidence with params:', {
+          type: action.type,
+          title: action.reward.description,
+          content: actionSolution,
+          solution: actionSolution
+        });
+
+        const params = new URLSearchParams({
+          type: action.type || 'PUZZLE',
+          title: action.reward.description || action.text,
+          content: actionSolution,
+          solution: actionSolution
+        });
+
+        const evidenceResponse = await fetch(`/api/evidence/${actionId}?${params}`);
+
+        if (evidenceResponse.ok) {
+          const evidenceData = await evidenceResponse.json();
+          console.log('Evidence response:', evidenceData);
+          
+          // Create the evidence object with the generated content
+          const evidence = {
+            id: `${actionId}_evidence`,
+            title: action.reward.description || action.text,
+            type: action.type || 'PUZZLE',
+            content: evidenceData.content,
+            description: evidenceData.description,
+            metadata: evidenceData.metadata,
+            contentType: evidenceData['content-type'],
+            discoveredAt: new Date().toISOString(),
+            usedIn: [],
+            availableActions: []
+          };
+
+          // Add the evidence to the game store
+          addEvidence(evidence);
+
+          // Add to chat items
+          setChatItems(prev => [
+            ...prev,
+            {
+              id: `evidence-${evidence.id}-${Date.now()}`,
+              type: 'evidence',
+              text: evidence.content,
+              currentText: evidence.content,
+              evidence: evidence,
+              isComplete: true,
+              chapterNumber: currentChapter
+            }
+          ]);
+        }
+      } catch (error) {
+        console.error('Error generating evidence:', error);
+      }
+    }
+
+    // Remove the solved action from available actions
+    const updatedActions = availableActions.filter(a => a.id !== actionId);
+    setLocalAvailableActions(updatedActions);
+    setAvailableActions(updatedActions);
   };
 
   const handleChapterProgression = async () => {
@@ -1244,6 +1213,7 @@ export default function StoryDevelopment() {
                           action={item.action}
                           onSolve={item.onSolve}
                           onChapterProgress={item.onChapterProgress}
+                          existingEvidence={existingEvidence}
                         />
                       </motion.div>
                     );

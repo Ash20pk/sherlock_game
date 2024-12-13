@@ -18,14 +18,15 @@ Include:
 - Write in a classic noir narrative style.`,
 
   HOLMES_INITIAL_REACTION: `Write Holmes's initial reaction to the case in his characteristic style.
-Required sections: NARRATIVE, DIALOGUE only
+Required sections: NARRATIVE, DIALOGUE only, do not include DEDUCTIONS, ACTIONS, EVIDENCE
 Include:
 - His first deductions from the initial information
 - A brief exchange with Watson
 - His immediate thoughts on the case's peculiarities
 - Any preliminary hypotheses
 - Watson's medical or practical insights
-- Maintain Holmes's precise, analytical manner of speaking.`,
+- Maintain Holmes's precise, analytical manner of speaking.
+- No additional sections, texts or formatting.`,
 
   STORY_DEVELOPMENT: `Develop the story with new revelations and developments.
 Required sections: CHAPTER, NARRATIVE, DIALOGUE, EVIDENCE, DEDUCTIONS, ACTIONS
@@ -44,20 +45,14 @@ Interactive Element Types (select exactly one):
 2. Riddles (20% probability):
    - Cryptic messages or hidden meanings
    
-3. Puzzles (10% probability):
+3. Puzzles (20% probability):
    - Combination locks or coded messages
    
 4. Medical (5% probability):
    - Medical analysis challenges
    
-5. Observation (5% probability):
-   - Detail-finding challenges
-   
-6. Logic (5% probability):
+5. Logic (5% probability):
    - Timeline or alibi verification
-   
-7. Physical (5% probability):
-   - Material examination or tracking
 
 Challenge Requirements:
 - Each challenge must be unique
