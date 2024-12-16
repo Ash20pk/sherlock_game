@@ -14,16 +14,12 @@ interface DialogueEntry {
 }
 
 interface Deduction {
-  conclusion: string
   observation: string
   timestamp: string
-  author: 'HOLMES' | 'WATSON'
 }
 
 interface Evidence {
   id: string
-  type: string
-  title: string
   description: string
   discoveredAt: string
   usedIn: string[]

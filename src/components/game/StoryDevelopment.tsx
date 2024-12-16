@@ -33,7 +33,8 @@ const StoryBlock = ({
   action, 
   onSolve, 
   onChapterProgress,
-  existingEvidence 
+  existingEvidence,
+  chapterNumber 
 }) => {
   const getTextStyle = () => {
     switch (type) {
@@ -67,7 +68,8 @@ const StoryBlock = ({
     }
   };
 
-  console.log('Rendering StoryBlock:', { type, text, speaker, isTyping, evidence, deduction, action });
+  console.log('existing evidence:', existingEvidence);
+  console.log('existing action evidence:', action);
 
   return (
     <motion.div
@@ -79,7 +81,7 @@ const StoryBlock = ({
         <div className="flex flex-col items-center">
           <Scroll className="w-8 h-8 text-amber-800 mb-4" />
           <div className="text-3xl font-serif text-stone-800 tracking-wide">
-            {currentText}
+            Chapter {chapterNumber}: {currentText}
           </div>
           <div className="mt-4 h-px w-32 bg-gradient-to-r from-transparent via-amber-800/30 to-transparent" />
         </div>
@@ -106,13 +108,18 @@ const StoryBlock = ({
           {type === 'action' ? (
             <ChallengeCard 
               action={action}
-              evidence={action.requiresEvidence?.map(evidenceId => ({
-                ...existingEvidence.find(e => e.id === evidenceId),
-                hint: action.challenge?.hints,
-                text: action.text,
-                type: action.type,
-                solution: action.challenge?.solution
-              }))}
+              evidence={action.requiresEvidence?.map(evidenceId => {
+                const foundEvidence = existingEvidence.find(e => e.id.includes(evidenceId));
+                console.log('exisiting evidence:', existingEvidence, 'evidenceId:', evidenceId);
+                console.log('Found evidence:', foundEvidence);
+                return {
+                  ...foundEvidence,
+                  hint: action.challenge?.hints,
+                  description: foundEvidence?.description, 
+                  type: action.type,
+                  solution: action.challenge?.solution
+                };
+              })}
               onSolve={onSolve}
               onChapterProgress={onChapterProgress}
             />
@@ -135,9 +142,6 @@ const StoryBlock = ({
               )}
             </div>
           )}
-
-          {/* Decorative elements */}
-          <div className="absolute -left-2 top-0 bottom-0 w-px bg-amber-800/10" />
         </>
       )}
     </motion.div>
@@ -177,6 +181,7 @@ const EvidenceItem: React.FC<{ evidence: Evidence }> = ({ evidence }) => {
       type?: string;
     };
     description?: string;
+    content?: string;
     hint?: [];
     analysis?: string;
   }>({});
@@ -187,26 +192,29 @@ const EvidenceItem: React.FC<{ evidence: Evidence }> = ({ evidence }) => {
   console.log('Rendering EvidenceItem Key:', evidence);
 
   const loadEvidenceDetails = useCallback(async () => {
-    if (!evidenceDetails.hint && !isLoading && availableActions.length > 0) {
+    if (!evidenceDetails.hint && !isLoading && availableActions.length > 0 && !evidenceDetails.metadata) {
       setIsLoading(true);
       try {
         const response = await fetch(
           `/api/evidence/${evidence.id}?` + new URLSearchParams({
             type: evidence.type,
-            title: evidence.title,
+            description: evidence.description,
             hint: evidence.hint || '',
             solution: evidence.solution || ''
           })
         );
         const data = await response.json();
-        setEvidenceDetails(data);
+        setEvidenceDetails(prev => ({
+          ...prev,
+          ...data,
+        }));
       } catch (error) {
         console.error('Error loading evidence details:', error);
       } finally {
         setIsLoading(false);
       }
     }
-  }, [evidence, evidenceDetails.content, isLoading, availableActions]);
+  }, [evidence.id, evidence.type, evidence.description, evidence.hint, evidence.solution, evidenceDetails.hint, evidenceDetails.metadata, isLoading, availableActions]);
 
   const loadHolmesAnalysis = async () => {
     if (!evidenceDetails.analysis && !isLoadingAnalysis) {
@@ -230,12 +238,11 @@ const EvidenceItem: React.FC<{ evidence: Evidence }> = ({ evidence }) => {
       }
     }
   };
-
   useEffect(() => {
-    if (availableActions.length > 0) {
+    if (availableActions.length > 0 && !evidenceDetails.metadata) {
       loadEvidenceDetails();
     }
-  }, [availableActions, loadEvidenceDetails]);
+  }, [availableActions, evidenceDetails.metadata, loadEvidenceDetails]);
 
   return (
     <div className="relative">
@@ -244,7 +251,7 @@ const EvidenceItem: React.FC<{ evidence: Evidence }> = ({ evidence }) => {
         className="w-full text-left p-3 rounded-lg bg-stone-50 hover:bg-stone-100 
                    border-2 border-stone-200 transition-colors duration-200"
       >
-        <div className="font-medium text-stone-900">{evidence.title}</div>
+        <div className="font-medium text-stone-900">{evidence.description}</div>
         {isLoading && (
           <div className="text-sm text-stone-500">Loading evidence details...</div>
         )}
@@ -330,7 +337,6 @@ const ChallengeCard: React.FC<{
   const [showHints, setShowHints] = useState(false);
   const [isCorrect, setIsCorrect] = useState(false);
 
-  console.log('challenge:', action);
 
   // Calculate similarity between two strings (0 to 1)
   const calculateSimilarity = (str1: string, str2: string): number => {
@@ -349,16 +355,6 @@ const ChallengeCard: React.FC<{
     return intersection.size / union.size;
   };
   const handleSubmit = () => {
-    console.log('Submitting answer:', attempt);
-    if (action.type === 'ACTIONS') {
-      onSolve();
-      onChapterProgress({
-        type: action.type,
-        text: action.action?.text || action.text,
-        chosenAction: attempt
-      });
-      return;
-    }
 
     const similarity = calculateSimilarity(attempt, action.challenge?.solution || '');
     if (similarity >= 0.1) {
@@ -471,8 +467,6 @@ const ChallengeCard: React.FC<{
     }
   };
 
-  console.log('EvidenceAction:', evidence);
-
   // Challenge card for all other types
   return (
     <motion.div
@@ -568,6 +562,7 @@ export default function StoryDevelopment() {
     setPhase,
     addDialogue,
     addEvidence,
+    addDeduction,
     setAvailableActions,
     dialogueHistory,
     evidence: existingEvidence,
@@ -718,6 +713,35 @@ export default function StoryDevelopment() {
   }, []);
 
   useEffect(() => {
+    if (streamingState.isComplete === true) {
+      chatItems.forEach(item => {
+        if (item.type === 'dialogue') {
+          addDialogue({
+            text: item.text,
+            speaker: item.speaker || '',
+            timestamp: new Date().toISOString()
+          });
+        }
+        if (item.type === 'deduction') {
+          addDeduction({
+            observation: item.text,
+            timestamp: new Date().toISOString()
+          });
+        }
+        if (item.type === 'evidence') {
+          addEvidence({
+            id: item.id,
+            description: item.text,
+            discoveredAt: new Date().toISOString(),
+            usedIn: [],
+            availableActions: []
+          });
+        }
+      });
+    }
+  }, [streamingState.isComplete]);
+
+  useEffect(() => {
     if (!streamingState.content) return;
 
     const content = streamingState.content;
@@ -738,31 +762,39 @@ export default function StoryDevelopment() {
                 item => item.type === 'dialogue' && item.speaker === speaker
               );
               
+              const cleantext = text
+                .replace(/##.*$/, '') // Remove ## markers
+                .replace(/^\"|\"$/g, '') // Remove outer quotes
+                .replace(/^\"|\"|\"$/g, '') // Remove any remaining quotes
+                .replace(/^\[|\]$/g, '') // Remove leading and trailing square brackets
+                .trim();
+
               // If we found a previous dialogue from this speaker and it's not complete
               if (lastIndex !== -1 && !prev[prev.length - 1 - lastIndex].isComplete) {
+
                 // Update existing dialogue
                 return prev.map((item, index) => {
                   if (index === prev.length - 1 - lastIndex) {
                     return {
                       ...item,
-                      text: text,
-                      currentText: text,
-                      isComplete: text.endsWith('##')
+                      text: cleantext,
+                      currentText: cleantext,
+                      isComplete: cleantext.endsWith('##')
                     };
                   }
                   return item;
                 });
-              } else {
+              } else {        
                 // Create new dialogue item
                 return [
                   ...prev,
                   {
                     id: `dialogue-${speaker}-${currentChapter}-${Date.now()}`,
                     type: 'dialogue',
-                    text: text,
-                    currentText: text,
+                    text: cleantext,
+                    currentText: cleantext,
                     speaker: speaker,
-                    isComplete: text.endsWith('##'),
+                    isComplete: cleantext.endsWith('##'),
                     chapterNumber: currentChapter
                   }
                 ];
@@ -781,17 +813,13 @@ export default function StoryDevelopment() {
           const evidenceText = evidenceMatch[1].trim();
           // Only process if we have a complete evidence section
           if (evidenceText.includes(']')) {
-            console.log('Found complete evidence section:', evidenceText);
             try {
               const evidenceData = JSON.parse(evidenceText);
-              console.log('Parsed evidence data:', evidenceData);
               if (Array.isArray(evidenceData)) {
                 evidenceData.forEach(evidence => {
-                  console.log('Processing evidence item:', evidence);
                   if (!processedEvidenceIds.has(evidence.id)) {
                     processedEvidenceIds.add(evidence.id);
                     const evidenceContent = evidence.content || evidence.details?.text || evidence.description || '';
-                    console.log('Evidence content to display:', evidenceContent);
                     setChatItems(prev => [
                       ...prev,
                       {
@@ -825,17 +853,13 @@ export default function StoryDevelopment() {
           const deductionsText = deductionsMatch[1].trim();
           // Only process if we have a complete deductions section
           if (deductionsText.includes(']')) {
-            console.log('Found complete deductions section:', deductionsText);
             try {
               const deductionsData = JSON.parse(deductionsText);
-              console.log('Parsed deductions data:', deductionsData);
               if (Array.isArray(deductionsData)) {
                 deductionsData.forEach(deduction => {
-                  console.log('Processing deduction item:', deduction);
                   if (!processedDeductionIds.has(deduction.id)) {
                     processedDeductionIds.add(deduction.id);
                     const deductionContent = deduction.description;
-                    console.log('Deduction content to display:', deductionContent);
                     setChatItems(prev => [
                       ...prev,
                       {
@@ -870,10 +894,8 @@ export default function StoryDevelopment() {
           const actionText = actionMatch[1].trim();
           // Only process if we have a complete action section
           if (actionText.includes('}')) {  
-            console.log('Found complete action section:', actionText);
             try {
               const action = JSON.parse(actionText);
-              console.log('Parsed action data:', action);
 
               // Store action in state
               setAvailableActions([action]);
@@ -899,23 +921,6 @@ export default function StoryDevelopment() {
                   }
                 ]);
 
-                console.log('Before Processing action:', chatItems);
-                // Load required evidence for the action if needed
-                if (action.requiresEvidence && Array.isArray(action.requiresEvidence)) {                  
-                  action.requiresEvidence.forEach(evidenceId => {
-                    if (!existingEvidence.some(e => e.id === evidenceId)) {
-                      addEvidence({
-                        id: evidenceId,
-                        title: action.text || 'Loading...',
-                        content: action.challenge?.question || 'Loading evidence...',
-                        description: '',
-                        discoveredAt: new Date().toISOString(),
-                        usedIn: [],
-                        availableActions: []
-                      });
-                    }
-                  });
-                }
               }
             } catch (parseError) {
               console.error('Error parsing action JSON:', parseError);
@@ -952,6 +957,15 @@ export default function StoryDevelopment() {
   
     let charIndex = 0;
     const targetText = currentItem.text;
+
+    if (currentItem.type === 'dialogue') {
+      addDialogue({
+        text: targetText || '',
+        speaker: currentItem.speaker || '',
+        timestamp: new Date().toISOString()
+      });
+    }
+    
     
     const timer = setInterval(() => {
       if (charIndex <= targetText.length) {
@@ -988,8 +1002,6 @@ export default function StoryDevelopment() {
     }
   }, [chatItems]);
 
-  console.log('Available actions:', availableActions);
-
   // Helper function to determine the correct insert position for new items
   const getInsertIndex = (items: ChatItem[], type: string): number => {
     const orderPriority: { [key: string]: number } = {
@@ -1024,72 +1036,7 @@ export default function StoryDevelopment() {
 
   const handleActionSolved = async (actionId: string) => {
     const action = availableActions.find(a => a.id === actionId);
-    console.log('handleActionSolved', actionId, action)
     if (!action) return;
-
-    // If the action has a reward of type EVIDENCE, generate evidence content
-    if (action.reward?.type === 'EVIDENCE') {
-      try {
-        // Get the solution from the action marker
-        const actionSolution = typeof action.solution === 'string' ? action.solution : 
-                             Array.isArray(action.solution) ? action.solution.join('\n') : 
-                             action.challenge?.solution || '';
-
-        console.log('Generating evidence with params:', {
-          type: action.type,
-          title: action.reward.description,
-          content: actionSolution,
-          solution: actionSolution
-        });
-
-        const params = new URLSearchParams({
-          type: action.type || 'PUZZLE',
-          title: action.reward.description || action.text,
-          content: actionSolution,
-          solution: actionSolution
-        });
-
-        const evidenceResponse = await fetch(`/api/evidence/${actionId}?${params}`);
-
-        if (evidenceResponse.ok) {
-          const evidenceData = await evidenceResponse.json();
-          console.log('Evidence response:', evidenceData);
-          
-          // Create the evidence object with the generated content
-          const evidence = {
-            id: `${actionId}_evidence`,
-            title: action.reward.description || action.text,
-            type: action.type || 'PUZZLE',
-            content: evidenceData.content,
-            description: evidenceData.description,
-            metadata: evidenceData.metadata,
-            contentType: evidenceData['content-type'],
-            discoveredAt: new Date().toISOString(),
-            usedIn: [],
-            availableActions: []
-          };
-
-          // Add the evidence to the game store
-          addEvidence(evidence);
-
-          // Add to chat items
-          setChatItems(prev => [
-            ...prev,
-            {
-              id: `evidence-${evidence.id}-${Date.now()}`,
-              type: 'evidence',
-              text: evidence.content,
-              currentText: evidence.content,
-              evidence: evidence,
-              isComplete: true,
-              chapterNumber: currentChapter
-            }
-          ]);
-        }
-      } catch (error) {
-        console.error('Error generating evidence:', error);
-      }
-    }
 
     // Remove the solved action from available actions
     const updatedActions = availableActions.filter(a => a.id !== actionId);
@@ -1102,7 +1049,7 @@ export default function StoryDevelopment() {
       setPhase('CASE_CONCLUSION');
       return;
     }
-
+  
     const nextChapter = currentChapter + 1;
     setCurrentChapter(nextChapter);
     
@@ -1114,63 +1061,6 @@ export default function StoryDevelopment() {
       recentDialogue: dialogueHistory,
       evidence: existingEvidence,
     });
-  };
-
-  const handleAction = async (action: Action) => {
-    // If action requires evidence, mark it as used
-    if (action.requiresEvidence) {
-      action.requiresEvidence.forEach(evidenceId => {
-        // useEvidence(evidenceId, action.id);
-      });
-    }
-
-    // Add Watson's action to dialogue
-    addDialogue({
-      text: action.text,
-      speaker: "Dr. Watson",
-      timestamp: new Date().toISOString()
-    });
-
-    // Start new streaming response with the selected action
-    startStreaming('STORY_DEVELOPMENT', {
-      phase: 'STORY_DEVELOPMENT',
-      currentLocation: '221B Baker Street',
-      selectedAction: action,
-      recentDialogue: dialogueHistory,
-      evidence: existingEvidence,
-    });
-  };
-
-  const handleActionSelected = async (actionId: string) => {
-    const context: any = {
-      phase: 'STORY_DEVELOPMENT',
-      selectedAction: actionId,
-      evidence: existingEvidence,
-      recentDialogue: dialogueHistory.slice(-3),
-      recentDeductions: [],
-    };
-    
-    await startStreaming('STORY_DEVELOPMENT', context);
-    
-    if (streamingState.fullResponse?.selectedAction) {
-      const { unlockedEvidence, unlockedDeductions } = streamingState.fullResponse.selectedAction;
-      unlockedEvidence?.forEach(evidence => addEvidence(evidence));
-      unlockedDeductions?.forEach(deduction => {
-        // addDeduction(deduction);
-      });
-    }
-  };
-
-  const handleChallengeSolved = async (solution: string) => {
-    const context: any = {
-      phase: 'STORY_DEVELOPMENT',
-      selectedSolution: solution,
-      evidence: existingEvidence,
-      recentDialogue: dialogueHistory.slice(-3),
-      recentDeductions: [],
-    };
-    
-    await startStreaming('STORY_DEVELOPMENT', context);
   };
 
   console.log('Chat items:', chatItems);
@@ -1211,9 +1101,10 @@ export default function StoryDevelopment() {
                           evidence={item.evidence}
                           deduction={item.deduction}
                           action={item.action}
-                          onSolve={item.onSolve}
-                          onChapterProgress={item.onChapterProgress}
+                          onSolve={() => handleActionSolved(item.action.id)}
+                          onChapterProgress={() => handleChapterProgression()}
                           existingEvidence={existingEvidence}
+                          chapterNumber={item.chapterNumber}
                         />
                       </motion.div>
                     );

@@ -5,13 +5,13 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const generateEvidencePrompt = (type: string, title: string, content: string, solution: string) => {
+const generateEvidencePrompt = (type: string, description: string, hints: string, solution: string) => {
   const basePrompt = `You are a Victorian-era police evidence clerk, tasked with creating detailed evidence reports.
   
 Current Case Information:
 Type: ${type}
-Title: ${title}
-Content: ${content}
+Description: ${description}
+Hints: ${hints}
 Required Solution: ${solution}
 
 Your task is to create compelling evidence that will lead an investigator to discover the solution through careful analysis.`;
@@ -84,11 +84,11 @@ export async function GET(
   try {
     const { searchParams } = new URL(request.url);
     const evidenceType = searchParams.get('type') || 'ACTION';
-    const title = searchParams.get('title') || '';
+    const description = searchParams.get('description') || '';
     const hints = searchParams.get('hint') || '';
     const solution = searchParams.get('solution') || '';
 
-    const prompt = generateEvidencePrompt(evidenceType, title, hints, solution);
+    const prompt = generateEvidencePrompt(evidenceType, description, hints, solution);
 
     const response = await openai.chat.completions.create({
       model: "gpt-4",
@@ -103,45 +103,6 @@ export async function GET(
     });
 
     const generatedContent = JSON.parse(response.choices[0].message.content || '{}');
-
-    // Validate that the evidence contains elements that lead to the solution
-    const validationResponse = await openai.chat.completions.create({
-      model: "gpt-4",
-      messages: [
-        {
-          role: "system",
-          content: `You are a detective's assistant, validating evidence. 
-          
-Evidence Hints: ${generatedContent.hints}
-Required Solution: ${solution}
-
-Verify that:
-1. The evidence contains sufficient clues to reach the solution
-2. The clues are fair and logical
-3. The difficulty level is appropriate
-4. The hints are helpful without being too obvious
-
-Respond with a JSON object:
-{
-  "isValid": boolean,
-  "confidence": number (0-1),
-  "suggestedImprovements": string[]
-}`
-        }
-      ],
-      temperature: 0.3,
-      max_tokens: 500,
-    });
-
-    const validation = JSON.parse(validationResponse.choices[0].message.content || '{}');
-
-    // If the evidence isn't valid enough, add the suggested improvements to the hints
-    if (validation.confidence < 0.7) {
-      generatedContent.hints = [
-        ...(generatedContent.hints || []),
-        ...validation.suggestedImprovements
-      ];
-    }
 
     return NextResponse.json({
       metadata: generatedContent.metadata,

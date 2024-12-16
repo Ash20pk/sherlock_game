@@ -34,6 +34,7 @@ Required sections: CHAPTER, NARRATIVE, DIALOGUE, EVIDENCE, DEDUCTIONS, ACTIONS
 Story Elements:
 - New information coming to light
 - Character interactions and witness accounts
+- Dialogues between Holmes and Watson
 - Environmental details and atmosphere
 - Evidence must be text-based, decodable through words not pictures
 - Only ONE type of interactive element per chapter
@@ -93,16 +94,23 @@ Your response must follow these exact rules:
 
 2. Format for each section:
    CHAPTER: Single line chapter title
-   NARRATIVE: Continuous single paragraph
+   NARRATIVE: Continuous single paragraph in 100 words
    DIALOGUE: array of entries in one single line formatted as:
      ##SPEAKER## [name] ##TEXT## [dialogue] ##SPEAKER## [name] ##TEXT## [dialogue] (Don't use JSON formatting)
-   DEDUCTIONS: JSON array of deduction objects
+   DEDUCTIONS: JSON array of deduction objects in this format:
+   [
+    {
+      "id": "unique_id", (Don't repeat the same id)
+      "description": "Deduction description",
+      "requiresEvidence": ["evidence_id"],
+    }
+   ]
    EVIDENCE: JSON array of evidence objects
    ACTION: JSON array with exactly one challenge object
 
 3. Challenge Object Structure:
    {
-     "id": "unique_id",
+     "id": "unique_id", (Don't repeat the same id)
      "text": "Description",
      "type": "ONE_OF_CHALLENGE_TYPES",
      "challenge": {  // For non-ACTION types
